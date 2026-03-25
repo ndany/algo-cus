@@ -1,0 +1,19 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: tests that hit external APIs (yfinance, FRED)",
+]
+addopts = "--cov=. --cov-report=term-missing --cov-report=html:output/coverage -q"
+
+[tool.coverage.run]
+omit = [
+    "tests/*",
+    "examples/*",
+    "dashboard/*",
+    "output/*",
+    ".venv/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

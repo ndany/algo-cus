@@ -23,47 +23,129 @@ import pandas as pd
 import numpy as np
 
 from strategies.base import Strategy
+from config import COMMISSION, SLIPPAGE, INITIAL_CAPITAL, POSITION_SIZE
+
+
+def calculate_metrics(
+    portfolio_values: pd.Series,
+    trades: pd.DataFrame,
+    initial_capital: float,
+    strategy_name: str = "Strategy",
+) -> dict:
+    """Calculate standard performance metrics from backtest results.
+
+    This is a standalone function so it can be reused by the walk-forward
+    engine without instantiating a full Backtest object.
+
+    Args:
+        portfolio_values: Series of daily portfolio values.
+        trades: DataFrame of executed trades (Action, Price, Shares, Value).
+        initial_capital: Starting capital.
+        strategy_name: Name for the metrics dict.
+
+    Returns:
+        Dict of performance metrics.
+    """
+    total_return = (
+        (portfolio_values.iloc[-1] - initial_capital) / initial_capital * 100
+    )
+
+    daily_returns = portfolio_values.pct_change().dropna()
+    sharpe = 0.0
+    if daily_returns.std() != 0:
+        sharpe = (daily_returns.mean() / daily_returns.std()) * np.sqrt(252)
+
+    cummax = portfolio_values.cummax()
+    drawdown = (portfolio_values - cummax) / cummax
+    max_drawdown = drawdown.min() * 100
+
+    win_rate = 0.0
+    num_trades = 0
+    if not trades.empty:
+        sells = trades[trades["Action"] == "SELL"]
+        buys = trades[trades["Action"] == "BUY"]
+        num_trades = len(sells)
+        if num_trades > 0 and len(buys) >= num_trades:
+            wins = sum(
+                sells.iloc[i]["Value"] > buys.iloc[i]["Value"]
+                for i in range(num_trades)
+            )
+            win_rate = wins / num_trades * 100
+
+    return {
+        "Strategy": strategy_name,
+        "Total Return (%)": round(total_return, 2),
+        "Sharpe Ratio": round(sharpe, 2),
+        "Max Drawdown (%)": round(max_drawdown, 2),
+        "Number of Trades": num_trades,
+        "Win Rate (%)": round(win_rate, 2),
+        "Final Value ($)": round(portfolio_values.iloc[-1], 2),
+    }
 
 
 class Backtest:
     def __init__(
         self,
         strategy: Strategy,
-        initial_capital: float = 10_000.0,
-        commission: float = 0.001,  # 0.1% per trade (typical for stocks)
-        position_size: float = 1.0,  # fraction of capital to use per trade
+        initial_capital: float = INITIAL_CAPITAL,
+        commission: float = COMMISSION,
+        slippage: float = SLIPPAGE,
+        position_size: float = POSITION_SIZE,
     ):
         self.strategy = strategy
         self.initial_capital = initial_capital
         self.commission = commission
+        self.slippage = slippage
         self.position_size = position_size
         self.results: pd.DataFrame | None = None
+        self.trades: pd.DataFrame = pd.DataFrame()
 
-    def run(self, data: pd.DataFrame) -> pd.DataFrame:
+    def run(
+        self,
+        data: pd.DataFrame,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> pd.DataFrame:
         """Execute the backtest on historical data.
 
         Simulates a simple long-only strategy:
-        - Buy signal → buy shares with available capital
-        - Sell signal → sell all shares
+        - Buy signal -> buy shares with available capital
+        - Sell signal -> sell all shares
+
+        Args:
+            data: OHLCV DataFrame.
+            start_date: Optional start date filter (inclusive).
+            end_date: Optional end date filter (inclusive).
         """
-        df = self.strategy.generate_signals(data)
+        df = data.copy()
+
+        # Apply date slicing if requested
+        if start_date is not None:
+            df = df[df["Date"] >= pd.Timestamp(start_date)]
+        if end_date is not None:
+            df = df[df["Date"] <= pd.Timestamp(end_date)]
+        df = df.reset_index(drop=True)
+
+        df = self.strategy.generate_signals(df)
 
         cash = self.initial_capital
         shares = 0.0
         portfolio_values = []
         trades = []
 
+        # Combined friction: commission + slippage
+        buy_friction = self.commission + self.slippage
+        sell_friction = self.commission + self.slippage
+
         for i, row in df.iterrows():
             price = row["Close"]
             signal = row.get("Signal", 0)
 
             if signal == 1 and cash > 0:
-                # BUY: spend a fraction of cash on shares
-                # Reserve enough for commission so we don't exceed cash
                 available = cash * self.position_size
-                invest_amount = available / (1 + self.commission)
-                commission_cost = invest_amount * self.commission
-                total_cost = invest_amount + commission_cost
+                invest_amount = available / (1 + buy_friction)
+                friction_cost = invest_amount * buy_friction
+                total_cost = invest_amount + friction_cost
                 if total_cost <= cash:
                     shares = invest_amount / price
                     cash -= total_cost
@@ -73,8 +155,7 @@ class Backtest:
                     )
 
             elif signal == -1 and shares > 0:
-                # SELL: liquidate all shares
-                proceeds = shares * price * (1 - self.commission)
+                proceeds = shares * price * (1 - sell_friction)
                 trades.append(
                     {"Date": row["Date"], "Action": "SELL", "Price": price,
                      "Shares": shares, "Value": proceeds}
@@ -82,7 +163,6 @@ class Backtest:
                 cash += proceeds
                 shares = 0.0
 
-            # Track total portfolio value each day
             portfolio_value = cash + shares * price
             portfolio_values.append(portfolio_value)
 
@@ -94,59 +174,16 @@ class Backtest:
         return df
 
     def get_metrics(self) -> dict:
-        """Calculate key performance metrics.
-
-        These are the standard metrics every quant looks at:
-        - Total Return: overall profit/loss percentage
-        - Sharpe Ratio: risk-adjusted return (higher is better, >1 is good)
-        - Max Drawdown: worst peak-to-trough decline (how bad can it get?)
-        - Win Rate: percentage of profitable trades
-        """
+        """Calculate key performance metrics."""
         if self.results is None:
             raise ValueError("Run the backtest first with .run()")
 
-        df = self.results
-        total_return = (
-            (df["Portfolio_Value"].iloc[-1] - self.initial_capital)
-            / self.initial_capital
-            * 100
+        return calculate_metrics(
+            portfolio_values=self.results["Portfolio_Value"],
+            trades=self.trades,
+            initial_capital=self.initial_capital,
+            strategy_name=self.strategy.name,
         )
-
-        # Sharpe Ratio: annualized (risk-free rate assumed 0 for simplicity)
-        daily_returns = df["Daily_Return"].dropna()
-        sharpe = 0.0
-        if daily_returns.std() != 0:
-            sharpe = (daily_returns.mean() / daily_returns.std()) * np.sqrt(252)
-
-        # Max Drawdown: largest drop from a peak
-        cumulative = df["Portfolio_Value"]
-        rolling_max = cumulative.cummax()
-        drawdown = (cumulative - rolling_max) / rolling_max
-        max_drawdown = drawdown.min() * 100
-
-        # Win rate from trades
-        win_rate = 0.0
-        num_trades = 0
-        if not self.trades.empty:
-            sells = self.trades[self.trades["Action"] == "SELL"]
-            buys = self.trades[self.trades["Action"] == "BUY"]
-            num_trades = len(sells)
-            if num_trades > 0 and len(buys) >= num_trades:
-                wins = sum(
-                    sells.iloc[i]["Value"] > buys.iloc[i]["Value"]
-                    for i in range(num_trades)
-                )
-                win_rate = wins / num_trades * 100
-
-        return {
-            "Strategy": self.strategy.name,
-            "Total Return (%)": round(total_return, 2),
-            "Sharpe Ratio": round(sharpe, 2),
-            "Max Drawdown (%)": round(max_drawdown, 2),
-            "Number of Trades": num_trades,
-            "Win Rate (%)": round(win_rate, 2),
-            "Final Value ($)": round(df["Portfolio_Value"].iloc[-1], 2),
-        }
 
     def summary(self) -> str:
         """Print a human-readable performance summary."""

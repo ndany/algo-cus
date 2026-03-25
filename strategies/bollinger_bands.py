@@ -28,6 +28,16 @@ class BollingerBandsStrategy(Strategy):
         self.period = period
         self.num_std = num_std
 
+    def get_params(self) -> dict:
+        return {"period": self.period, "num_std": self.num_std}
+
+    def set_params(self, **kwargs) -> None:
+        if "period" in kwargs:
+            self.period = kwargs["period"]
+        if "num_std" in kwargs:
+            self.num_std = kwargs["num_std"]
+        self.name = f"Bollinger({self.period},{self.num_std})"
+
     def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
         df = data.copy()
 

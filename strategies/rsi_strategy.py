@@ -33,6 +33,22 @@ class RSIStrategy(Strategy):
         self.oversold = oversold
         self.overbought = overbought
 
+    def get_params(self) -> dict:
+        return {
+            "period": self.period,
+            "oversold": self.oversold,
+            "overbought": self.overbought,
+        }
+
+    def set_params(self, **kwargs) -> None:
+        if "period" in kwargs:
+            self.period = kwargs["period"]
+        if "oversold" in kwargs:
+            self.oversold = kwargs["oversold"]
+        if "overbought" in kwargs:
+            self.overbought = kwargs["overbought"]
+        self.name = f"RSI({self.period})"
+
     def _calculate_rsi(self, prices: pd.Series) -> pd.Series:
         """Compute RSI using the standard Wilder smoothing method."""
         delta = prices.diff()

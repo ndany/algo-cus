@@ -6,3 +6,17 @@ dist/
 build/
 .venv/
 *.png
+
+# Data cache
+data/cache/
+
+# Output artifacts
+output/
+
+# Pytest
+.pytest_cache/
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
