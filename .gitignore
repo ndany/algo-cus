@@ -15,6 +15,7 @@ output/
 
 # Pytest
 .pytest_cache/
+.coverage
 htmlcov/
 
 # IDE
