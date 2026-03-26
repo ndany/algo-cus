@@ -7,6 +7,10 @@ build/
 .venv/
 *.png
 
+# OS
+.DS_Store
+Thumbs.db
+
 # Data cache
 data/cache/
 
