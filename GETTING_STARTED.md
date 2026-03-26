@@ -25,13 +25,54 @@ pip install -r requirements.txt
 # Run all unit tests with coverage
 python -m pytest tests/ -m "not integration" -q
 
-# Expected: 67 tests passing, ~88% coverage
+# Expected: 75 tests passing, ~88% coverage
 # Coverage HTML report generated at output/coverage/index.html
 ```
 
 Open `output/coverage/index.html` in your browser to explore the coverage report.
 
-## 3. Backtest with Synthetic Data
+## 3. Launch the Dashboard (Quickest Way to See Everything)
+
+```bash
+SKIP_AUTH=1 python dashboard/app.py
+```
+
+Open http://localhost:8050 in your browser.
+
+**Visual validations:**
+- [ ] Dark trader workstation theme loads (deep navy background, cyan accents)
+- [ ] "ALGOSTATION" branding in the navbar with monospace font
+- [ ] Empty state shows "Enter a ticker to begin" with dollar sign icon
+- [ ] Ticker input has dark styling with uppercase transform
+
+Now type `AMZN` in the ticker input and click **ANALYZE** (or press Enter).
+
+**Wait 3-5 seconds** for yfinance to fetch data. The status bar will update.
+
+**Summary view validations:**
+- [ ] Status bar shows green checkmark with ticker name and elapsed time
+- [ ] Top metrics row: ticker, buy & hold return, best strategy return, Sharpe, max drawdown, data points
+- [ ] Metric values are color-coded: green for positive returns, red for negative, cyan for neutral
+- [ ] Candlestick chart: green/red candles with volume bars below, dark background
+- [ ] Portfolio comparison: three colored equity curves starting at $10,000
+- [ ] Three strategy cards at the bottom with return, Sharpe, trade count, win rate, and robustness score
+- [ ] All charts have the dark plotly theme (dark background, light gridlines)
+- [ ] Charts are interactive: hover for values, zoom with drag, reset with double-click
+
+**Click any strategy card** (e.g., "MA_Crossover(20,50)"):
+
+**Strategy detail validations:**
+- [ ] "← Back to Summary" button at the top
+- [ ] Strategy name displayed in monospace
+- [ ] Metrics row with return, Sharpe, max DD, trades, win rate, final value
+- [ ] Signal chart: price line with green triangle-up (buy) and red triangle-down (sell) markers
+- [ ] Drawdown chart: red shaded area showing peak-to-trough declines
+- [ ] Walk-forward chart: grouped bars (green = in-sample, orange = out-of-sample) with degradation ratio
+- [ ] Click "← Back to Summary" returns to the overview
+
+**Try other tickers:** `GOOG`, `JPM`, `MSFT`
+
+## 4. Backtest via CLI (Alternative to Dashboard)
 
 ```bash
 python examples/run_backtest.py
@@ -47,6 +88,12 @@ python examples/run_backtest.py
   - `Synthetic_portfolio_comparison.html` — Equity curves overlaid
   - `Synthetic_metrics.html` — Side-by-side metrics table
 
+```bash
+# With real data
+python examples/run_backtest.py --ticker AMZN
+python examples/run_backtest.py --ticker AMZN GOOG JPM MSFT
+```
+
 **Visual validations:**
 - [ ] Candlestick chart renders with green/red candles and volume bars below
 - [ ] Buy signals (green triangles up) appear at logical points for each strategy
@@ -56,28 +103,9 @@ python examples/run_backtest.py
 - [ ] Bollinger: buy signals near the lower band
 - [ ] Portfolio comparison: all three equity curves start at $10,000
 - [ ] Charts are interactive (zoom, pan, hover shows values)
-
-## 4. Backtest with Real Market Data
-
-```bash
-# Single ticker
-python examples/run_backtest.py --ticker AMZN
-
-# Multiple tickers
-python examples/run_backtest.py --ticker AMZN GOOG JPM MSFT
-```
-
-**What to expect:**
-- First run downloads data from Yahoo Finance (cached locally in `data/cache/`)
-- Same set of charts per ticker, but with real price history
-- HTML files named by ticker: `AMZN_candlestick.html`, etc.
-
-**Visual validations:**
 - [ ] Real price data looks correct (compare a chart to Yahoo Finance for sanity)
-- [ ] Strategies generate reasonable signals on real data
-- [ ] Second run is faster (uses cached data)
 
-## 5. Walk-Forward Analysis (Phase 2)
+## 5. Walk-Forward Analysis
 
 Open a Python session to run walk-forward validation interactively:
 
@@ -215,6 +243,9 @@ save_figure(fig, "wf_optimized_ma")
 | yfinance rate limit | Data is cached after first download; delete `data/cache/` to force re-download |
 | Charts not opening | HTML files are in `output/` — open them manually in a browser |
 | Tests fail on import | Run from the project root directory (`algo-cus/`) |
+| Dashboard won't start | Check that `SKIP_AUTH=1` is set for local dev |
+| Dashboard shows blank page | Open browser console for errors; check terminal for Python tracebacks |
+| "SUPABASE_URL required" error | Set `SKIP_AUTH=1` to bypass auth locally |
 
 ## File Outputs Checklist
 
@@ -223,7 +254,7 @@ After running everything above, your `output/` directory should contain:
 ```
 output/
   coverage/index.html              # Coverage report
-  Synthetic_candlestick.html       # From step 3
+  Synthetic_candlestick.html       # From step 4
   Synthetic_*_signals.html         # Signal charts (3 files)
   Synthetic_portfolio_comparison.html
   Synthetic_metrics.html
