@@ -38,6 +38,26 @@ Charts are saved as interactive HTML files in `output/`.
 - **Backtest engine**: `backtest/engine.py` — the `calculate_metrics()` standalone function is reused by walk-forward; don't fold it back into the class.
 - **Visualization**: All chart functions in `visualization/` return `plotly.graph_objects.Figure` objects. They're composable — usable in Jupyter, saved as HTML, or embedded in the Dash dashboard.
 
+## Running the Dashboard
+
+```bash
+SKIP_AUTH=1 python dashboard/app.py        # Local dev (no auth)
+gunicorn dashboard.app:server              # Production
+```
+
+The dashboard is a Dash app at `dashboard/app.py`. It uses:
+- Supabase for auth (Google OAuth + invitation codes)
+- On-demand yfinance data fetching
+- Dark trader workstation theme (`dashboard/theme.py` + `dashboard/assets/style.css`)
+- Progressive disclosure UX: summary → strategy detail drill-down
+
+Environment variables for production:
+- `SUPABASE_URL` — Supabase project URL
+- `SUPABASE_KEY` — Supabase anon/public key
+- `SKIP_AUTH` — Set to `1` to bypass auth in development
+- `DASH_DEBUG` — Set to `1` for hot reload
+- `PORT` — Server port (default 8050)
+
 ## Key Directories
 
 ```
@@ -45,7 +65,8 @@ config.py           Central configuration (tickers, slippage, commission, paths)
 backtest/           Engine, walk-forward, bias guards
 data/               Sample data generator, yfinance provider, FRED stub
 strategies/         Base class + MA crossover, RSI, Bollinger Bands
-visualization/      Plotly chart modules
+visualization/      Plotly chart modules (standalone, composable)
+dashboard/          Dash web app (dark theme, auth, deployment)
 tests/              pytest suite (88% coverage target)
 output/             Gitignored — HTML charts, coverage reports, paper trade logs
 ```
@@ -56,4 +77,6 @@ output/             Gitignored — HTML charts, coverage reports, paper trade lo
 - Integration tests hitting external APIs are marked `@pytest.mark.integration`
 - Slippage defaults to 0.3% (manual execution estimate), configurable in `config.py`
 - Cache files go in `data/cache/` (gitignored, parquet format)
-- No database — JSON persistence for paper trading logs
+- Supabase for auth and invitation codes; no other database
+- Dashboard chart builders live in `dashboard/app.py` and use `dashboard/theme.py` for dark styling
+- All `visualization/*.py` charts remain standalone (return `go.Figure`) — the dashboard composes them
