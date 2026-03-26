@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Educational trading algorithm project evolving into a full recommendation engine with real market data, walk-forward validation, ensemble strategies, and interactive visualization. See `PLAN.md` for the full 6-phase roadmap.
+Educational trading algorithm project evolving into a full recommendation engine with real market data, walk-forward validation, ensemble strategies, and interactive visualization. See `docs/PLAN.md` for the full roadmap.
 
 ## Quick Reference
 
@@ -68,6 +68,7 @@ strategies/         Base class + MA crossover, RSI, Bollinger Bands
 visualization/      Plotly chart modules (standalone, composable)
 dashboard/          Dash web app (dark theme, auth, deployment)
 tests/              pytest suite (88% coverage target)
+docs/               Plan, deployment guide, getting started, session notes
 output/             Gitignored — HTML charts, coverage reports, paper trade logs
 ```
 

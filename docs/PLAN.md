@@ -172,7 +172,7 @@ Evolve this educational trading algorithm project into a full recommendation eng
 ### Deployment
 - Render free tier (with UptimeRobot to avoid cold starts)
 - Supabase for auth + invitation codes
-- See `DEPLOYMENT.md` for progressive scaling roadmap (5 stages, free → $40/month)
+- See `docs/DEPLOYMENT.md` for progressive scaling roadmap (5 stages, free → $40/month)
 
 ### Future Dashboard Additions (as phases complete)
 - Phase 3: Regime overlay on price chart, ensemble attribution view

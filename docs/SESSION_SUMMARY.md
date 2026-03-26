@@ -38,7 +38,7 @@ We discussed turning the project into a deployed web app. Key decisions:
 
 3. **Auth: Supabase** — Google OAuth + invitation codes. Chosen over Auth0, Firebase, and custom Flask auth. Supabase gives us auth + PostgreSQL in one free service. Invitation code flow: sign in with Google → if first login, enter code → code consumed → access granted.
 
-4. **Data Fetching: On-demand** — Fetch from yfinance when user clicks "Analyze" (2-5s wait). Chosen over daily cache and hybrid approaches for simplicity. See DEPLOYMENT.md for progressive caching roadmap.
+4. **Data Fetching: On-demand** — Fetch from yfinance when user clicks "Analyze" (2-5s wait). Chosen over daily cache and hybrid approaches for simplicity. See `docs/DEPLOYMENT.md` for progressive caching roadmap.
 
 5. **Theme: Dark Trader Workstation** — Deep navy background (#0a0e17), cyan primary accent (#00d4ff), green buy / red sell signals, JetBrains Mono for data, glassmorphic panels.
 
@@ -46,7 +46,7 @@ We discussed turning the project into a deployed web app. Key decisions:
 No official documented limits (~2,000 requests/hour per IP). One request per analysis. Not a concern for our use case.
 
 ### Deployment Scaling Roadmap
-Created a 5-stage progressive scaling plan (see DEPLOYMENT.md):
+Created a 5-stage progressive scaling plan (see `docs/DEPLOYMENT.md`):
 - Stage 1: Free (Render + Supabase + UptimeRobot to avoid cold starts)
 - Stage 2: $7/month (always-on + in-memory cache)
 - Stage 3: $14/month (Supabase DB cache + background refresh)
@@ -58,7 +58,7 @@ Was incorrectly set to `claude/trading-algorithm-basics-wtmEM`. User changed it 
 
 ---
 
-## 6-Phase Plan (see PLAN.md for full details)
+## 6-Phase Plan (see `docs/PLAN.md` for full details)
 
 | Phase | What | Status |
 |-------|------|--------|
@@ -115,11 +115,12 @@ Was incorrectly set to `claude/trading-algorithm-basics-wtmEM`. User changed it 
 - All unit tests use synthetic data (deterministic, seed=42)
 
 ### Project Artifacts
-- `PLAN.md` — Full 6-phase implementation plan
-- `CLAUDE.md` — Project context for future Claude sessions
-- `GETTING_STARTED.md` — Step-by-step validation guide with visual checklists
-- `SESSION_SUMMARY.md` — This document
-- `DEPLOYMENT.md` — Progressive 5-stage deployment scaling roadmap
+- `README.md` — Project landing page (root)
+- `CLAUDE.md` — Project context for future Claude sessions (root)
+- `docs/PLAN.md` — Full implementation plan with phase status
+- `docs/GETTING_STARTED.md` — Step-by-step validation guide with visual checklists
+- `docs/DEPLOYMENT.md` — Progressive 5-stage deployment scaling roadmap
+- `docs/SESSION_SUMMARY.md` — This document
 - `pyproject.toml` — pytest + coverage configuration
 
 ---
