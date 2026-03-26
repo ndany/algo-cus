@@ -27,6 +27,16 @@ class MovingAverageCrossover(Strategy):
         self.fast_period = fast_period
         self.slow_period = slow_period
 
+    def get_params(self) -> dict:
+        return {"fast_period": self.fast_period, "slow_period": self.slow_period}
+
+    def set_params(self, **kwargs) -> None:
+        if "fast_period" in kwargs:
+            self.fast_period = kwargs["fast_period"]
+        if "slow_period" in kwargs:
+            self.slow_period = kwargs["slow_period"]
+        self.name = f"MA_Crossover({self.fast_period},{self.slow_period})"
+
     def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
         df = data.copy()
 

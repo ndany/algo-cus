@@ -35,5 +35,30 @@ class Strategy(ABC):
               0  = Hold / no action
         """
 
+    def get_params(self) -> dict:
+        """Return current strategy parameters as a dict.
+
+        Override in subclasses to expose tunable parameters
+        for walk-forward optimization.
+        """
+        return {}
+
+    def set_params(self, **kwargs) -> None:
+        """Update strategy parameters.
+
+        Override in subclasses. The name is automatically updated
+        to reflect new parameter values.
+        """
+        pass
+
+    def confidence(self, data: pd.DataFrame, row_index: int) -> float:
+        """Return signal confidence at a given row (0.0 to 1.0).
+
+        Override in subclasses to provide signal-strength information
+        for ensemble weighting and recommendation confidence.
+        Default returns 1.0 (fully confident).
+        """
+        return 1.0
+
     def __repr__(self) -> str:
         return f"{self.name}"
