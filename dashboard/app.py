@@ -556,6 +556,8 @@ if not SKIP_AUTH:
         if auth_data and auth_data.get("authenticated"):
             return _make_app_shell(), auth_data
 
+        logger.info(f"route_page: href={'[has access_token]' if href and 'access_token' in href else href and href[:80] or 'None'}")
+
         # Check for OAuth callback with access_token in URL fragment
         # (implicit flow returns #access_token=...&token_type=...)
         if href and "access_token=" in href:

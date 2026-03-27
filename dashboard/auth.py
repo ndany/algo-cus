@@ -42,18 +42,25 @@ def get_supabase() -> Client:
 def get_google_login_url(redirect_to: str) -> str:
     """Generate the Google OAuth login URL via Supabase.
 
+    Constructs the URL directly with response_type=token to force
+    implicit flow. The SDK's sign_in_with_oauth may default to PKCE
+    regardless of flow_type, and PKCE requires a code_verifier that
+    can't be reliably persisted across Dash's stateless callbacks.
+
     Args:
         redirect_to: URL to redirect to after successful auth.
 
     Returns:
         The OAuth URL to redirect the user to.
     """
-    sb = get_supabase()
-    response = sb.auth.sign_in_with_oauth({
-        "provider": "google",
-        "options": {"redirect_to": redirect_to},
-    })
-    return response.url
+    from urllib.parse import quote
+    url = os.environ.get("SUPABASE_URL")
+    return (
+        f"{url}/auth/v1/authorize"
+        f"?provider=google"
+        f"&redirect_to={quote(redirect_to)}"
+        f"&response_type=token"
+    )
 
 
 def get_user_from_token(access_token: str) -> dict | None:
