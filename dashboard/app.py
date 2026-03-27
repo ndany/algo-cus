@@ -34,30 +34,11 @@ app = dash.Dash(
 )
 server = app.server  # Expose for gunicorn
 
-# Trust X-Forwarded-* headers from Render's load balancer so that
-# request.url_root returns https:// instead of http://.
-from werkzeug.middleware.proxy_fix import ProxyFix
-server.wsgi_app = ProxyFix(server.wsgi_app, x_proto=1, x_host=1)
-
-
 # --- Auth Check ---
 # Set SKIP_AUTH=1 for local dev (no Supabase needed). In production, set SKIP_AUTH=0.
 SKIP_AUTH = os.environ.get("SKIP_AUTH", "1") == "1"
 
-# Diagnostic — remove after debugging
-@server.before_request
-def _diag():
-    from flask import request as _req, jsonify as _json
-    if _req.path == "/auth/diag":
-        return _json({
-            "SKIP_AUTH": SKIP_AUTH,
-            "SKIP_AUTH_raw": os.environ.get("SKIP_AUTH", "(not set)"),
-            "SUPABASE_URL": bool(os.environ.get("SUPABASE_URL")),
-        })
-
 if not SKIP_AUTH:
-    import secrets as _secrets
-    from flask import redirect, request, session
     from dashboard.auth import (
         get_google_authorize_url, exchange_code_for_session,
         get_user_from_token,
@@ -65,10 +46,97 @@ if not SKIP_AUTH:
         register_authorized_user, is_user_authorized,
     )
     # Flask session secret — must be stable across gunicorn workers.
-    # Falls back to SUPABASE_KEY (always available when auth is enabled).
     server.secret_key = os.environ.get(
         "FLASK_SECRET_KEY", os.environ.get("SUPABASE_KEY", "change-me")
     )
+
+
+# --- WSGI middleware for auth + proxy headers ---
+# Dash wraps server.wsgi_app with its own middleware that intercepts ALL
+# requests and serves the SPA index. Flask before_request and routes never
+# fire. We must handle auth at the WSGI layer, outside Dash's middleware.
+
+class _AuthAndProxyMiddleware:
+    """WSGI middleware that handles /auth/* routes and X-Forwarded-* headers.
+    Wraps Dash's WSGI app so auth routes are intercepted before Dash sees them."""
+
+    def __init__(self, wsgi_app, flask_app):
+        self.wsgi_app = wsgi_app
+        self.flask_app = flask_app
+
+    def __call__(self, environ, start_response):
+        # Fix X-Forwarded-Proto for HTTPS behind load balancer
+        if environ.get("HTTP_X_FORWARDED_PROTO") == "https":
+            environ["wsgi.url_scheme"] = "https"
+
+        path = environ.get("PATH_INFO", "/")
+
+        if not SKIP_AUTH and path.startswith("/auth/"):
+            return self._handle_auth(environ, start_response, path)
+
+        return self.wsgi_app(environ, start_response)
+
+    def _handle_auth(self, environ, start_response, path):
+        """Handle auth routes using a mini Flask test-request context."""
+        from werkzeug.wrappers import Request
+        req = Request(environ)
+
+        if path == "/auth/diag":
+            import json
+            body = json.dumps({
+                "SKIP_AUTH": SKIP_AUTH,
+                "SKIP_AUTH_raw": os.environ.get("SKIP_AUTH", "(not set)"),
+                "SUPABASE_URL": bool(os.environ.get("SUPABASE_URL")),
+            }).encode()
+            start_response("200 OK", [("Content-Type", "application/json")])
+            return [body]
+
+        if path == "/auth/login":
+            scheme = environ.get("wsgi.url_scheme", "http")
+            host = environ.get("HTTP_HOST", "localhost")
+            callback_url = f"{scheme}://{host}/auth/callback"
+            authorize_url, code_verifier = get_google_authorize_url(callback_url)
+
+            # Store code_verifier in Flask session via a real request context
+            with self.flask_app.request_context(environ):
+                from flask import session, redirect as flask_redirect
+                session["code_verifier"] = code_verifier
+                resp = flask_redirect(authorize_url)
+                return resp(environ, start_response)
+
+        if path == "/auth/callback":
+            with self.flask_app.request_context(environ):
+                from flask import session, redirect as flask_redirect
+
+                auth_code = req.args.get("code")
+                code_verifier = session.pop("code_verifier", None)
+                logger.info(f"auth_callback: code={bool(auth_code)}, verifier={bool(code_verifier)}")
+
+                if not auth_code or not code_verifier:
+                    logger.warning(f"OAuth callback missing: code={bool(auth_code)}, verifier={bool(code_verifier)}")
+                    resp = flask_redirect("/")
+                    return resp(environ, start_response)
+
+                user = exchange_code_for_session(auth_code, code_verifier)
+                if not user:
+                    logger.warning("OAuth code exchange failed")
+                    resp = flask_redirect("/")
+                    return resp(environ, start_response)
+
+                if not is_user_authorized(user["id"]):
+                    register_authorized_user(user["id"], user["email"],
+                                             user.get("name", user["email"]))
+
+                session["authenticated"] = True
+                session["user"] = user
+                resp = flask_redirect("/")
+                return resp(environ, start_response)
+
+        # Unknown /auth/ path — pass through to Dash
+        return self.wsgi_app(environ, start_response)
+
+
+server.wsgi_app = _AuthAndProxyMiddleware(server.wsgi_app, server)
 
 
 # ============================================================
@@ -568,48 +636,9 @@ else:
 # ============================================================
 
 if not SKIP_AUTH:
-    # --- Flask auth routes via before_request ---
-    # Dash registers a catch-all that intercepts /auth/* before Flask
-    # route matching. Using before_request guarantees we handle auth
-    # paths before Dash sees them.
-
-    @server.before_request
-    def handle_auth_routes():
-        # Diagnostic — remove after debugging
-        if request.path == "/auth/ping":
-            from flask import jsonify
-            return jsonify({"status": "ok", "skip_auth": SKIP_AUTH, "path": request.path})
-
-        if request.path == "/auth/login":
-            callback_url = request.url_root.rstrip("/") + "/auth/callback"
-            authorize_url, code_verifier = get_google_authorize_url(callback_url)
-            session["code_verifier"] = code_verifier
-            logger.info(f"auth_login: redirect_to={callback_url}")
-            return redirect(authorize_url)
-
-        if request.path == "/auth/callback":
-            auth_code = request.args.get("code")
-            code_verifier = session.pop("code_verifier", None)
-            logger.info(f"auth_callback: code={bool(auth_code)}, verifier={bool(code_verifier)}")
-
-            if not auth_code or not code_verifier:
-                logger.warning(f"OAuth callback missing: code={bool(auth_code)}, verifier={bool(code_verifier)}")
-                return redirect("/")
-
-            user = exchange_code_for_session(auth_code, code_verifier)
-            if not user:
-                logger.warning("OAuth code exchange failed")
-                return redirect("/")
-
-            if not is_user_authorized(user["id"]):
-                register_authorized_user(user["id"], user["email"],
-                                         user.get("name", user["email"]))
-
-            session["authenticated"] = True
-            session["user"] = user
-            return redirect("/")
-
     # --- Dash callbacks ---
+    # Auth routes are handled by _AuthAndProxyMiddleware at the WSGI layer.
+    # These callbacks read the Flask session set by /auth/callback.
 
     @callback(
         Output("page-container", "children"),
@@ -623,10 +652,10 @@ if not SKIP_AUTH:
         if auth_data and auth_data.get("authenticated"):
             return _make_app_shell(), auth_data
 
-        # Check Flask session (set by /auth/callback)
+        # Check Flask session (set by /auth/callback WSGI middleware)
+        from flask import session
         if session.get("authenticated"):
             user = session.get("user", {})
-            # Transfer to Dash store and clear Flask session
             session.pop("authenticated", None)
             session.pop("user", None)
             return _make_app_shell(), {"authenticated": True, "user": user}
@@ -678,6 +707,7 @@ if not SKIP_AUTH:
     )
     def sign_out(n_clicks):
         """Clear auth state and return to login page."""
+        from flask import session
         session.clear()
         return {}, make_login_page()
 
