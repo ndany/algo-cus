@@ -223,6 +223,13 @@ class TestDashApp:
         assert "verify-code-btn" in login_str
         assert "invitation-status" in login_str
 
+    def test_login_page_with_message(self):
+        """Login page should display a message when provided."""
+        from dashboard.app import make_login_page
+        login = make_login_page(message="Welcome Alice")
+        login_str = str(login)
+        assert "Welcome Alice" in login_str
+
 
 class TestAuthModule:
     def test_auth_module_imports(self):

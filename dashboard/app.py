@@ -104,11 +104,39 @@ def make_ticker_bar():
     })
 
 
-def make_login_page():
+def make_login_page(message=None):
+    status_children = []
+    if message:
+        status_children = [html.Span(message, style={
+            "color": COLORS["accent_cyan"], "fontSize": "13px",
+        })]
+
     return html.Div([
         html.Div([
             html.Div("ALGOSTATION", className="login-title"),
             html.Div("Trading Analysis Terminal", className="login-subtitle"),
+            html.Div([
+                html.Div("Enter your invitation code to access the terminal", style={
+                    "color": COLORS["text_secondary"], "fontSize": "13px",
+                    "marginBottom": "12px",
+                }),
+                dbc.Input(
+                    id="invitation-code",
+                    placeholder="XXXX-XXXX-XXXX",
+                    className="invitation-input",
+                    maxLength=20,
+                ),
+                dbc.Button(
+                    "Access Terminal",
+                    id="verify-code-btn",
+                    className="btn-analyze",
+                    style={"marginTop": "12px", "width": "100%"},
+                    n_clicks=0,
+                ),
+                html.Div(id="invitation-status", children=status_children,
+                         style={"marginTop": "8px"}),
+            ]),
+            html.Hr(style={"borderColor": COLORS["border"], "margin": "24px 0"}),
             html.A(
                 dbc.Button(
                     [html.Span("Sign in with Google")],
@@ -117,27 +145,10 @@ def make_login_page():
                 id="google-login-link",
                 href="#",
             ),
-            html.Hr(style={"borderColor": COLORS["border"], "margin": "24px 0"}),
-            html.Div([
-                html.Div("Or enter an invitation code", style={
-                    "color": COLORS["text_secondary"], "fontSize": "12px",
-                    "marginBottom": "8px",
-                }),
-                dbc.Input(
-                    id="invitation-code",
-                    placeholder="XXXX-XXXX",
-                    className="invitation-input",
-                    maxLength=20,
-                ),
-                dbc.Button(
-                    "Verify Code",
-                    id="verify-code-btn",
-                    className="btn-analyze",
-                    style={"marginTop": "12px", "width": "100%"},
-                    n_clicks=0,
-                ),
-                html.Div(id="invitation-status", style={"marginTop": "8px"}),
-            ]),
+            html.Div("For returning users with linked accounts", style={
+                "color": COLORS["text_muted"], "fontSize": "11px",
+                "marginTop": "8px", "textAlign": "center",
+            }),
         ], className="login-card"),
     ], className="login-container")
 
@@ -521,10 +532,8 @@ if not SKIP_AUTH:
             return _make_app_shell(), auth_data
 
         # Check for OAuth callback with access_token in URL fragment
-        # Supabase redirects with #access_token=...&token_type=...
-        # URL fragments aren't sent to server, but dcc.Location captures them
+        # (implicit flow returns #access_token=...&token_type=...)
         if href and "access_token=" in href:
-            # Extract token from fragment
             from urllib.parse import urlparse, parse_qs
             fragment = urlparse(href).fragment
             params = parse_qs(fragment)
@@ -533,17 +542,18 @@ if not SKIP_AUTH:
             if token:
                 user = get_user_from_token(token)
                 if user and is_user_authorized(user["id"]):
+                    # Returning user — go straight to app
                     return _make_app_shell(), {
                         "authenticated": True,
                         "user": user,
                         "token": token,
                     }
                 elif user:
-                    # Valid Google user but no invitation code used yet
-                    return make_login_page(), {
-                        "google_user": user,
-                        "token": token,
-                    }
+                    # New Google user — need invitation code to complete registration
+                    name = user.get("name", user.get("email", ""))
+                    return make_login_page(
+                        message=f"Welcome {name} — enter an invitation code to activate your account"
+                    ), {"google_user": user, "token": token}
 
         # Not authenticated — show login page
         return make_login_page(), no_update

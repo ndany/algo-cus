@@ -12,6 +12,7 @@ import logging
 from functools import wraps
 
 from supabase import create_client, Client
+from supabase.lib.client_options import SyncClientOptions
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,11 @@ def get_supabase() -> Client:
                 "SUPABASE_URL and SUPABASE_KEY environment variables are required. "
                 "Get these from your Supabase project settings."
             )
-        _client = create_client(url, key)
+        # Use implicit flow so Supabase returns #access_token in the URL
+        # fragment instead of ?code (PKCE). PKCE requires a code_verifier
+        # persisted across requests, which doesn't work in stateless Dash callbacks.
+        options = SyncClientOptions(flow_type="implicit")
+        _client = create_client(url, key, options=options)
     return _client
 
 
