@@ -564,6 +564,11 @@ if not SKIP_AUTH:
 
     @server.before_request
     def handle_auth_routes():
+        # Diagnostic — remove after debugging
+        if request.path == "/auth/ping":
+            from flask import jsonify
+            return jsonify({"status": "ok", "skip_auth": SKIP_AUTH, "path": request.path})
+
         if request.path == "/auth/login":
             callback_url = request.url_root.rstrip("/") + "/auth/callback"
             authorize_url, code_verifier = get_google_authorize_url(callback_url)
