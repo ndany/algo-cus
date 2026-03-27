@@ -10,6 +10,9 @@ Dark-mode trader workstation with progressive disclosure:
 import os
 import logging
 
+from dotenv import load_dotenv
+load_dotenv()  # Load .env file if present (local dev); no-op on Render
+
 import dash
 from dash import html, dcc, Input, Output, State, callback, no_update
 import dash_bootstrap_components as dbc
