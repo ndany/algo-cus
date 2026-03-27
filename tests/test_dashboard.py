@@ -213,22 +213,13 @@ class TestDashApp:
         layout_str = str(app.layout)
         assert "main-content" in layout_str
 
-    def test_login_page_has_required_components(self):
-        """Login page should have Google sign-in link and invitation code input."""
-        from dashboard.app import make_login_page
-        login = make_login_page()
-        login_str = str(login)
-        assert "google-login-link" in login_str
-        assert "invitation-code" in login_str
-        assert "verify-code-btn" in login_str
-        assert "invitation-status" in login_str
-
-    def test_login_page_with_message(self):
-        """Login page should display a message when provided."""
-        from dashboard.app import make_login_page
-        login = make_login_page(message="Welcome Alice")
-        login_str = str(login)
-        assert "Welcome Alice" in login_str
+    def test_plain_html_login_page_has_required_elements(self):
+        """The WSGI-level HTML login page has Google link and invitation form."""
+        from dashboard.app import _LOGIN_HTML
+        assert "/auth/login" in _LOGIN_HTML
+        assert "/auth/code" in _LOGIN_HTML
+        assert "Sign in with Google" in _LOGIN_HTML
+        assert "invitation code" in _LOGIN_HTML.lower()
 
 
 class TestAuthModule:

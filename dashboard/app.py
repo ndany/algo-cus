@@ -56,67 +56,95 @@ if not SKIP_AUTH:
 # requests and serves the SPA index. Flask before_request and routes never
 # fire. We must handle auth at the WSGI layer, outside Dash's middleware.
 
+_LOGIN_HTML = """<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AlgoStation</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>body{background:#0a0e17;margin:0;font-family:'Inter',sans-serif}</style>
+</head><body>
+<div class="login-container"><div class="login-card">
+<div class="login-title">ALGOSTATION</div>
+<div style="color:#94a3b8;font-size:14px;margin-bottom:24px">Trading Analysis Terminal</div>
+<div style="color:#94a3b8;font-size:13px;margin-bottom:12px">Enter your invitation code to access the terminal</div>
+<form method="POST" action="/auth/code">
+<input name="code" placeholder="XXXX-XXXX-XXXX" maxlength="20"
+ style="width:100%;padding:12px;background:#1a2332;border:1px solid #1e293b;
+ color:#e2e8f0;border-radius:6px;font-family:'JetBrains Mono',monospace;
+ text-transform:uppercase;box-sizing:border-box">
+<button type="submit" class="btn-analyze" style="margin-top:12px;width:100%;
+ padding:12px;border:none;border-radius:6px;cursor:pointer;font-weight:600;
+ font-size:14px">Access Terminal</button>
+</form>
+{message}
+<hr style="border-color:#1e293b;margin:24px 0">
+<a href="/auth/login" style="display:block;text-align:center;padding:12px;
+ background:#1a2332;border:1px solid #1e293b;border-radius:6px;color:#e2e8f0;
+ text-decoration:none;font-size:14px;font-weight:500">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"
+ style="vertical-align:middle;margin-right:10px">
+<path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32l3.55 2.76c2.07-1.91 3.29-4.73 3.29-8.09z"/>
+<path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.55-2.76c-.98.66-2.23 1.06-3.73 1.06-2.87 0-5.3-1.94-6.16-4.54l-3.66 2.84A11.99 11.99 0 0 0 12 23z"/>
+<path fill="#fff" d="M5.84 14.1a7.2 7.2 0 0 1 0-4.2L2.18 7.06A11.99 11.99 0 0 0 0 12c0 1.94.46 3.77 1.28 5.4l3.66-2.84z"/>
+<path fill="#fff" d="M12 4.75c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 1.09 14.97 0 12 0 7.31 0 3.25 2.7 1.28 6.61l3.66 2.84c.87-2.6 3.3-4.54 6.16-4.54z"/>
+</svg>Sign in with Google</a>
+<div style="color:#475569;font-size:11px;margin-top:8px;text-align:center">
+For returning users with linked accounts</div>
+</div></div>
+</body></html>"""
+
+
 class _AuthAndProxyMiddleware:
-    """WSGI middleware that handles /auth/* routes and X-Forwarded-* headers.
-    Wraps Dash's WSGI app so auth routes are intercepted before Dash sees them."""
+    """WSGI middleware for auth and proxy headers.
+
+    Handles everything auth-related as plain HTTP — no Dash involvement.
+    Unauthenticated users see a plain HTML login page. Authenticated
+    users pass through to Dash.
+    """
 
     def __init__(self, wsgi_app, flask_app):
         self.wsgi_app = wsgi_app
         self.flask_app = flask_app
 
     def __call__(self, environ, start_response):
-        # Fix X-Forwarded-Proto for HTTPS behind load balancer
         if environ.get("HTTP_X_FORWARDED_PROTO") == "https":
             environ["wsgi.url_scheme"] = "https"
 
+        if SKIP_AUTH:
+            return self.wsgi_app(environ, start_response)
+
         path = environ.get("PATH_INFO", "/")
 
-        if not SKIP_AUTH and path.startswith("/auth/"):
+        # Auth routes — always handled here
+        if path.startswith("/auth/"):
             return self._handle_auth(environ, start_response, path)
 
-        return self.wsgi_app(environ, start_response)
+        # Dash assets/API — always pass through
+        if path.startswith(("/_dash", "/assets/")):
+            return self.wsgi_app(environ, start_response)
+
+        # Check authentication for all other paths
+        with self.flask_app.request_context(environ):
+            from flask import session
+            if session.get("authenticated"):
+                return self.wsgi_app(environ, start_response)
+
+        # Not authenticated — show plain HTML login page
+        html = _LOGIN_HTML.replace("{message}", "")
+        start_response("200 OK", [
+            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Length", str(len(html.encode()))),
+        ])
+        return [html.encode()]
 
     def _save_session_and_respond(self, environ, start_response, resp):
-        """Save Flask session to cookie and return the WSGI response."""
         from flask import session
-        si = self.flask_app.session_interface
-        si.save_session(self.flask_app, session, resp)
+        self.flask_app.session_interface.save_session(self.flask_app, session, resp)
         return resp(environ, start_response)
 
     def _handle_auth(self, environ, start_response, path):
-        """Handle auth routes inside a Flask request context."""
         from werkzeug.wrappers import Request
         req = Request(environ)
-
-        if path == "/auth/session-test":
-            with self.flask_app.request_context(environ):
-                from flask import session
-                from werkzeug.wrappers import Response as WerkzeugResponse
-                session["test_key"] = "test_value"
-                resp = WerkzeugResponse("ok", status=200)
-                si = self.flask_app.session_interface
-                si.save_session(self.flask_app, session, resp)
-                headers = dict(resp.headers)
-                # Return debug info
-                import json
-                body = json.dumps({
-                    "session_modified": session.modified,
-                    "has_secret_key": bool(self.flask_app.secret_key),
-                    "cookie_header": headers.get("Set-Cookie", "(none)"),
-                    "all_headers": dict(resp.headers),
-                }).encode()
-                start_response("200 OK", [("Content-Type", "application/json")])
-                return [body]
-
-        if path == "/auth/diag":
-            import json
-            body = json.dumps({
-                "SKIP_AUTH": SKIP_AUTH,
-                "SKIP_AUTH_raw": os.environ.get("SKIP_AUTH", "(not set)"),
-                "SUPABASE_URL": bool(os.environ.get("SUPABASE_URL")),
-            }).encode()
-            start_response("200 OK", [("Content-Type", "application/json")])
-            return [body]
 
         if path == "/auth/login":
             scheme = environ.get("wsgi.url_scheme", "http")
@@ -136,7 +164,6 @@ class _AuthAndProxyMiddleware:
 
                 auth_code = req.args.get("code")
                 code_verifier = session.pop("code_verifier", None)
-                logger.info(f"auth_callback: code={bool(auth_code)}, verifier={bool(code_verifier)}")
 
                 if not auth_code or not code_verifier:
                     logger.warning(f"OAuth callback missing: code={bool(auth_code)}, verifier={bool(code_verifier)}")
@@ -158,7 +185,37 @@ class _AuthAndProxyMiddleware:
                 resp = flask_redirect("/")
                 return self._save_session_and_respond(environ, start_response, resp)
 
-        # Unknown /auth/ path — pass through to Dash
+        if path == "/auth/code":
+            # Invitation code form submission (POST)
+            with self.flask_app.request_context(environ):
+                from flask import session, redirect as flask_redirect
+                code = req.form.get("code", "").strip().upper()
+                identity = f"code:{code}"
+
+                if not code or not validate_invitation_code(code, user_identity=identity):
+                    html = _LOGIN_HTML.replace("{message}",
+                        '<div style="color:#ff4757;font-size:12px;margin-top:8px">'
+                        'Invalid or already claimed by another user</div>')
+                    start_response("200 OK", [
+                        ("Content-Type", "text/html; charset=utf-8"),
+                        ("Content-Length", str(len(html.encode()))),
+                    ])
+                    return [html.encode()]
+
+                consume_invitation_code(code, identity)
+                session["authenticated"] = True
+                session["user"] = {"email": identity, "name": "Guest"}
+                resp = flask_redirect("/")
+                return self._save_session_and_respond(environ, start_response, resp)
+
+        if path == "/auth/signout":
+            with self.flask_app.request_context(environ):
+                from flask import session, redirect as flask_redirect
+                session.clear()
+                resp = flask_redirect("/")
+                return self._save_session_and_respond(environ, start_response, resp)
+
+        # Unknown /auth/ path — pass through
         return self.wsgi_app(environ, start_response)
 
 
@@ -184,8 +241,9 @@ def make_navbar(show_signout=False):
     ]
     if show_signout:
         children.append(
-            dbc.Button("Sign out", id="signout-btn", outline=True, color="secondary",
-                       size="sm", style={"fontSize": "12px", "padding": "4px 12px"}),
+            dbc.Button("Sign out", href="/auth/signout", external_link=True,
+                       outline=True, color="secondary", size="sm",
+                       style={"fontSize": "12px", "padding": "4px 12px"}),
         )
     return dbc.Navbar(
         dbc.Container(children, fluid=True,
@@ -232,64 +290,9 @@ def make_ticker_bar():
     })
 
 
-def make_login_page(message=None):
-    status_children = []
-    if message:
-        status_children = [html.Span(message, style={
-            "color": COLORS["accent_cyan"], "fontSize": "13px",
-        })]
 
-    return html.Div([
-        html.Div([
-            html.Div("ALGOSTATION", className="login-title"),
-            html.Div("Trading Analysis Terminal", className="login-subtitle"),
-            html.Div([
-                html.Div("Enter your invitation code to access the terminal", style={
-                    "color": COLORS["text_secondary"], "fontSize": "13px",
-                    "marginBottom": "12px",
-                }),
-                dbc.Input(
-                    id="invitation-code",
-                    placeholder="XXXX-XXXX-XXXX",
-                    className="invitation-input",
-                    maxLength=20,
-                ),
-                dbc.Button(
-                    "Access Terminal",
-                    id="verify-code-btn",
-                    className="btn-analyze",
-                    style={"marginTop": "12px", "width": "100%"},
-                    n_clicks=0,
-                ),
-                html.Div(id="invitation-status", children=status_children,
-                         style={"marginTop": "8px"}),
-            ]),
-            html.Hr(style={"borderColor": COLORS["border"], "margin": "24px 0"}),
-            dbc.Button([
-                # White Google "G" — clean on dark background
-                html.Img(src="data:image/svg+xml,"
-                    "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E"
-                    "%3Cpath fill='%23fff' d='M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92"
-                    "a5.06 5.06 0 0 1-2.2 3.32l3.55 2.76c2.07-1.91 3.29-4.73 3.29-8.09z'/%3E"
-                    "%3Cpath fill='%23fff' d='M12 23c2.97 0 5.46-.98 7.28-2.66l-3.55-2.76"
-                    "c-.98.66-2.23 1.06-3.73 1.06-2.87 0-5.3-1.94-6.16-4.54l-3.66 2.84"
-                    "A11.99 11.99 0 0 0 12 23z'/%3E"
-                    "%3Cpath fill='%23fff' d='M5.84 14.1a7.2 7.2 0 0 1 0-4.2L2.18 7.06"
-                    "A11.99 11.99 0 0 0 0 12c0 1.94.46 3.77 1.28 5.4l3.66-2.84z'/%3E"
-                    "%3Cpath fill='%23fff' d='M12 4.75c1.62 0 3.06.56 4.21 1.64l3.15-3.15"
-                    "C17.45 1.09 14.97 0 12 0 7.31 0 3.25 2.7 1.28 6.61l3.66 2.84"
-                    "c.87-2.6 3.3-4.54 6.16-4.54z'/%3E%3C/svg%3E",
-                    style={"width": "18px", "height": "18px", "marginRight": "10px",
-                           "verticalAlign": "middle"}),
-                html.Span("Sign in with Google",
-                          style={"verticalAlign": "middle"}),
-            ], href="/auth/login", external_link=True, className="btn-google", id="google-login-link"),
-            html.Div("For returning users with linked accounts", style={
-                "color": COLORS["text_muted"], "fontSize": "11px",
-                "marginTop": "8px", "textAlign": "center",
-            }),
-        ], className="login-card"),
-    ], className="login-container")
+# Login page is now plain HTML served by _AuthAndProxyMiddleware.
+# No Dash components involved in the auth flow.
 
 
 def make_empty_state():
@@ -634,104 +637,15 @@ def _make_app_shell():
     ])
 
 
-if SKIP_AUTH:
-    # No auth — go straight to the app
-    app.layout = html.Div([
-        dcc.Store(id="analysis-store"),
-        dcc.Store(id="selected-strategy", data=-1),
-        dcc.Location(id="url", refresh=False),
-        _make_app_shell(),
-    ])
-else:
-    # Auth enabled — page-container swaps between login and app
-    app.layout = html.Div([
-        dcc.Store(id="analysis-store"),
-        dcc.Store(id="selected-strategy", data=-1),
-        dcc.Store(id="auth-store", storage_type="session"),
-        dcc.Location(id="url", refresh=False),
-        html.Div(id="page-container"),
-    ])
-
-
-# ============================================================
-# AUTH CALLBACKS (only when auth is enabled)
-# ============================================================
-
-if not SKIP_AUTH:
-    # --- Dash callbacks ---
-    # Auth routes are handled by _AuthAndProxyMiddleware at the WSGI layer.
-    # These callbacks read the Flask session set by /auth/callback.
-
-    @callback(
-        Output("page-container", "children"),
-        Output("auth-store", "data"),
-        Input("url", "href"),
-        State("auth-store", "data"),
-    )
-    def route_page(href, auth_data):
-        """Show login or app based on auth state."""
-        # Check Dash session store
-        if auth_data and auth_data.get("authenticated"):
-            return _make_app_shell(), auth_data
-
-        # Check Flask session (set by /auth/callback WSGI middleware)
-        from flask import session
-        if session.get("authenticated"):
-            user = session.get("user", {})
-            session.pop("authenticated", None)
-            session.pop("user", None)
-            return _make_app_shell(), {"authenticated": True, "user": user}
-
-        return make_login_page(), no_update
-
-    @callback(
-        Output("invitation-status", "children"),
-        Output("auth-store", "data", allow_duplicate=True),
-        Input("verify-code-btn", "n_clicks"),
-        State("invitation-code", "value"),
-        State("auth-store", "data"),
-        prevent_initial_call=True,
-    )
-    def verify_invitation(n_clicks, code, auth_data):
-        """Validate an invitation code and grant access."""
-        if not code or not code.strip():
-            return html.Span("Enter a code",
-                             style={"color": COLORS["accent_orange"], "fontSize": "12px"}), no_update
-
-        code = code.strip().upper()
-
-        # If user signed in with Google, link the code to their account
-        user = (auth_data or {}).get("google_user")
-        identity = user["email"] if user else f"code:{code}"
-
-        if not validate_invitation_code(code, user_identity=identity):
-            return html.Span("Invalid or already claimed by another user",
-                             style={"color": COLORS["accent_red"], "fontSize": "12px"}), no_update
-
-        if user:
-            consume_invitation_code(code, user["email"])
-            register_authorized_user(user["id"], user["email"], user["name"])
-            token = (auth_data or {}).get("token", "")
-            return no_update, {"authenticated": True, "user": user, "token": token}
-
-        # No Google sign-in — grant access with code only
-        consume_invitation_code(code, identity)
-        return no_update, {
-            "authenticated": True,
-            "user": {"email": identity, "name": "Guest"},
-        }
-
-    @callback(
-        Output("auth-store", "data", allow_duplicate=True),
-        Output("page-container", "children", allow_duplicate=True),
-        Input("signout-btn", "n_clicks"),
-        prevent_initial_call=True,
-    )
-    def sign_out(n_clicks):
-        """Clear auth state and return to login page."""
-        from flask import session
-        session.clear()
-        return {}, make_login_page()
+# Auth is handled entirely by _AuthAndProxyMiddleware at the WSGI layer.
+# Unauthenticated users see a plain HTML login page (no Dash).
+# Authenticated users reach this Dash layout.
+app.layout = html.Div([
+    dcc.Store(id="analysis-store"),
+    dcc.Store(id="selected-strategy", data=-1),
+    dcc.Location(id="url", refresh=False),
+    _make_app_shell(),
+])
 
 
 # ============================================================
