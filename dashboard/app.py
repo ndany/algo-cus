@@ -48,8 +48,11 @@ if not SKIP_AUTH:
         validate_invitation_code, consume_invitation_code,
         register_authorized_user, is_user_authorized,
     )
-    # Flask session secret for PKCE code_verifier storage
-    server.secret_key = os.environ.get("FLASK_SECRET_KEY", _secrets.token_hex(32))
+    # Flask session secret — must be stable across gunicorn workers.
+    # Falls back to SUPABASE_KEY (always available when auth is enabled).
+    server.secret_key = os.environ.get(
+        "FLASK_SECRET_KEY", os.environ.get("SUPABASE_KEY", "change-me")
+    )
 
 
 # ============================================================

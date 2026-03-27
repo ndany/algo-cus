@@ -32,7 +32,7 @@ User → Render (free tier, single process)
 2. Connect your GitHub repository
 3. Create a new **Web Service**:
    - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `gunicorn dashboard.app:server --bind 0.0.0.0:$PORT --workers 2 --timeout 120`
+   - **Start Command**: `gunicorn dashboard.app:server --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --preload`
    - **Instance Type**: Free
 4. Set environment variables:
    - `SUPABASE_URL` — from your Supabase project
