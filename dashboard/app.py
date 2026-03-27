@@ -557,44 +557,41 @@ else:
 # ============================================================
 
 if not SKIP_AUTH:
-    # --- Flask routes for OAuth PKCE flow ---
-    # These run server-side so the code_verifier can be stored in Flask session.
+    # --- Flask auth routes via before_request ---
+    # Dash registers a catch-all that intercepts /auth/* before Flask
+    # route matching. Using before_request guarantees we handle auth
+    # paths before Dash sees them.
 
-    @server.route("/auth/login")
-    def auth_login():
-        """Start the Google OAuth flow. Generates PKCE params, stores
-        code_verifier in Flask session, redirects to Supabase authorize."""
-        callback_url = request.url_root.rstrip("/") + "/auth/callback"
-        authorize_url, code_verifier = get_google_authorize_url(callback_url)
-        session["code_verifier"] = code_verifier
-        logger.info(f"auth_login: redirect_to={callback_url}")
-        return redirect(authorize_url)
+    @server.before_request
+    def handle_auth_routes():
+        if request.path == "/auth/login":
+            callback_url = request.url_root.rstrip("/") + "/auth/callback"
+            authorize_url, code_verifier = get_google_authorize_url(callback_url)
+            session["code_verifier"] = code_verifier
+            logger.info(f"auth_login: redirect_to={callback_url}")
+            return redirect(authorize_url)
 
-    @server.route("/auth/callback")
-    def auth_callback():
-        """Handle the OAuth callback. Exchanges auth code for session."""
-        auth_code = request.args.get("code")
-        code_verifier = session.pop("code_verifier", None)
-        logger.info(f"auth_callback: code={bool(auth_code)}, verifier={bool(code_verifier)}")
+        if request.path == "/auth/callback":
+            auth_code = request.args.get("code")
+            code_verifier = session.pop("code_verifier", None)
+            logger.info(f"auth_callback: code={bool(auth_code)}, verifier={bool(code_verifier)}")
 
-        if not auth_code or not code_verifier:
-            logger.warning(f"OAuth callback missing params: code={bool(auth_code)}, verifier={bool(code_verifier)}")
+            if not auth_code or not code_verifier:
+                logger.warning(f"OAuth callback missing: code={bool(auth_code)}, verifier={bool(code_verifier)}")
+                return redirect("/")
+
+            user = exchange_code_for_session(auth_code, code_verifier)
+            if not user:
+                logger.warning("OAuth code exchange failed")
+                return redirect("/")
+
+            if not is_user_authorized(user["id"]):
+                register_authorized_user(user["id"], user["email"],
+                                         user.get("name", user["email"]))
+
+            session["authenticated"] = True
+            session["user"] = user
             return redirect("/")
-
-        user = exchange_code_for_session(auth_code, code_verifier)
-        if not user:
-            logger.warning("OAuth code exchange failed")
-            return redirect("/")
-
-        # Auto-register on first Google sign-in
-        if not is_user_authorized(user["id"]):
-            register_authorized_user(user["id"], user["email"],
-                                     user.get("name", user["email"]))
-
-        # Store auth in Flask session so route_page can read it
-        session["authenticated"] = True
-        session["user"] = user
-        return redirect("/")
 
     # --- Dash callbacks ---
 
