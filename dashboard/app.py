@@ -44,6 +44,17 @@ server.wsgi_app = ProxyFix(server.wsgi_app, x_proto=1, x_host=1)
 # Set SKIP_AUTH=1 for local dev (no Supabase needed). In production, set SKIP_AUTH=0.
 SKIP_AUTH = os.environ.get("SKIP_AUTH", "1") == "1"
 
+# Diagnostic — remove after debugging
+@server.before_request
+def _diag():
+    from flask import request as _req, jsonify as _json
+    if _req.path == "/auth/diag":
+        return _json({
+            "SKIP_AUTH": SKIP_AUTH,
+            "SKIP_AUTH_raw": os.environ.get("SKIP_AUTH", "(not set)"),
+            "SUPABASE_URL": bool(os.environ.get("SUPABASE_URL")),
+        })
+
 if not SKIP_AUTH:
     import secrets as _secrets
     from flask import redirect, request, session
