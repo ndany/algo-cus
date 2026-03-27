@@ -76,8 +76,15 @@ class _AuthAndProxyMiddleware:
 
         return self.wsgi_app(environ, start_response)
 
+    def _save_session_and_respond(self, environ, start_response, resp):
+        """Save Flask session to cookie and return the WSGI response."""
+        from flask import session
+        si = self.flask_app.session_interface
+        si.save_session(self.flask_app, session, resp)
+        return resp(environ, start_response)
+
     def _handle_auth(self, environ, start_response, path):
-        """Handle auth routes using a mini Flask test-request context."""
+        """Handle auth routes inside a Flask request context."""
         from werkzeug.wrappers import Request
         req = Request(environ)
 
@@ -97,12 +104,11 @@ class _AuthAndProxyMiddleware:
             callback_url = f"{scheme}://{host}/auth/callback"
             authorize_url, code_verifier = get_google_authorize_url(callback_url)
 
-            # Store code_verifier in Flask session via a real request context
             with self.flask_app.request_context(environ):
                 from flask import session, redirect as flask_redirect
                 session["code_verifier"] = code_verifier
                 resp = flask_redirect(authorize_url)
-                return resp(environ, start_response)
+                return self._save_session_and_respond(environ, start_response, resp)
 
         if path == "/auth/callback":
             with self.flask_app.request_context(environ):
@@ -115,13 +121,13 @@ class _AuthAndProxyMiddleware:
                 if not auth_code or not code_verifier:
                     logger.warning(f"OAuth callback missing: code={bool(auth_code)}, verifier={bool(code_verifier)}")
                     resp = flask_redirect("/")
-                    return resp(environ, start_response)
+                    return self._save_session_and_respond(environ, start_response, resp)
 
                 user = exchange_code_for_session(auth_code, code_verifier)
                 if not user:
                     logger.warning("OAuth code exchange failed")
                     resp = flask_redirect("/")
-                    return resp(environ, start_response)
+                    return self._save_session_and_respond(environ, start_response, resp)
 
                 if not is_user_authorized(user["id"]):
                     register_authorized_user(user["id"], user["email"],
@@ -130,7 +136,7 @@ class _AuthAndProxyMiddleware:
                 session["authenticated"] = True
                 session["user"] = user
                 resp = flask_redirect("/")
-                return resp(environ, start_response)
+                return self._save_session_and_respond(environ, start_response, resp)
 
         # Unknown /auth/ path — pass through to Dash
         return self.wsgi_app(environ, start_response)
