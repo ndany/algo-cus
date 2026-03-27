@@ -563,19 +563,16 @@ if not SKIP_AUTH:
 
             if token:
                 user = get_user_from_token(token)
-                if user and is_user_authorized(user["id"]):
-                    # Returning user — go straight to app
+                if user:
+                    # Auto-register on first Google sign-in
+                    if not is_user_authorized(user["id"]):
+                        register_authorized_user(user["id"], user["email"],
+                                                 user.get("name", user["email"]))
                     return _make_app_shell(), {
                         "authenticated": True,
                         "user": user,
                         "token": token,
                     }
-                elif user:
-                    # New Google user — need invitation code to complete registration
-                    name = user.get("name", user.get("email", ""))
-                    return make_login_page(
-                        message=f"Welcome {name} — enter an invitation code to activate your account"
-                    ), {"google_user": user, "token": token}
 
         # Not authenticated — show login page
         return make_login_page(), no_update
