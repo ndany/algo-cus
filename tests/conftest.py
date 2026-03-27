@@ -1,10 +1,15 @@
 """Shared test fixtures."""
 
+import os
 import sys
 from pathlib import Path
 
 import pytest
 import pandas as pd
+
+# Force SKIP_AUTH=1 for tests so dashboard imports without Supabase credentials.
+# Must be set before any dashboard module is imported.
+os.environ["SKIP_AUTH"] = "1"
 
 # Ensure project root is on the path
 sys.path.insert(0, str(Path(__file__).parent.parent))

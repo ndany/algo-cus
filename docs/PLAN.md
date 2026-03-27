@@ -28,7 +28,7 @@ Evolve this educational trading algorithm project into a full recommendation eng
 
 ---
 
-## Phase 1: Real Market Data + Core Visualization
+## Phase 1: Real Market Data + Core Visualization — DONE
 
 **Goal**: Replace synthetic data with real yfinance data; establish plotly-based interactive charts.
 
@@ -61,7 +61,7 @@ Evolve this educational trading algorithm project into a full recommendation eng
 
 ---
 
-## Phase 2: Walk-Forward Backtesting + Bias Guards
+## Phase 2: Walk-Forward Backtesting + Bias Guards — DONE
 
 **Goal**: Honest validation framework that prevents overfitting.
 
@@ -151,34 +151,46 @@ Evolve this educational trading algorithm project into a full recommendation eng
 
 ---
 
-## Phase 6: Interactive Dashboard
+## Web Dashboard — DONE (built early, before Phase 3)
 
-**Goal**: Unified Dash app tying everything together.
+**Goal**: Deployable web app with dark trader workstation UX.
 
-### New Files
-- `dashboard/app.py` — Main Dash application
-- `dashboard/layouts/` — One module per tab
-- `dashboard/callbacks/` — Interactivity per tab
-- `dashboard/components.py` — Reusable UI pieces
+### What Was Built
+- `dashboard/app.py` — Dash app with progressive disclosure (summary → strategy drill-down)
+- `dashboard/auth.py` — Supabase Google OAuth + invitation codes
+- `dashboard/theme.py` — Dark color palette, custom plotly `trader_dark` template
+- `dashboard/assets/style.css` — Trader workstation CSS (JetBrains Mono, cyan/green/red accents)
+- `dashboard/analysis.py` — Orchestrates data fetch → strategies → backtests → walk-forward
+- `Procfile` + `render.yaml` — Render deployment config
 
-### Tabs
-1. Market Overview (candlestick, volume, regime, macro)
-2. Strategy Lab (parameter sliders, real-time backtest)
-3. Walk-Forward Analysis
-4. Ensemble & Regime
-5. Recommendations
-6. Paper Trading
-7. Learning Center
+### UX Flow
+1. Enter ticker → ANALYZE
+2. Summary: metrics tiles, candlestick, portfolio comparison, strategy cards
+3. Click strategy → detail: signals, drawdown, walk-forward
+4. Back to summary
+
+### Deployment
+- Render free tier (with UptimeRobot to avoid cold starts)
+- Supabase for auth + invitation codes
+- See `docs/DEPLOYMENT.md` for progressive scaling roadmap (5 stages, free → $40/month)
+
+### Future Dashboard Additions (as phases complete)
+- Phase 3: Regime overlay on price chart, ensemble attribution view
+- Phase 4: Recommendations tab, paper trading log
+- Phase 5: Macro context panel on summary view
 
 ---
 
 ## Dependency Graph
 
 ```
-Phase 1 (Data + Viz + Tests)
+Phase 1 (Data + Viz + Tests)       ✅ DONE
   |
   v
-Phase 2 (Walk-Forward)
+Phase 2 (Walk-Forward)             ✅ DONE
+  |
+  v
+Web Dashboard                      ✅ DONE (built early)
   |
   v
 Phase 3 (Ensemble + Regime) ------> Phase 5 (FRED Macro)
@@ -187,15 +199,14 @@ Phase 3 (Ensemble + Regime) ------> Phase 5 (FRED Macro)
 Phase 4 (Recommendations) <--------------+
   |
   v
-Phase 6 (Dashboard)
+Dashboard additions (per phase)
 ```
 
 ## Review Checkpoints
 
-1. After Phases 1-2 (foundation)
+1. After Phases 1-2 + Web Dashboard (foundation) ← **current**
 2. After Phase 3 (core innovation)
 3. After Phases 4-5 (recommendations + macro)
-4. After Phase 6 (dashboard)
 
 ## Testing Strategy
 
@@ -208,16 +219,18 @@ Phase 6 (Dashboard)
 
 ```
 algo-cus/
-  config.py
-  backtest/       engine.py, walk_forward.py, bias_guards.py
-  data/           sample_data.py, market_data.py, fred_data.py, cache/
-  strategies/     base.py, 3 existing, regime_detector.py, ensemble.py
-  recommendations/ engine.py, paper_trading.py, explainability.py
-  visualization/  charts.py, walk_forward.py, regime.py, recommendations.py, macro.py
-  dashboard/      app.py, components.py, layouts/, callbacks/
-  tests/          mirroring each module
-  examples/       run_backtest.py, run_dashboard.py, run_recommendation.py
-  output/         (gitignored: HTML charts, paper trade logs, coverage)
+  config.py              Central configuration
+  Procfile               Render deployment start command
+  render.yaml            Render service configuration
+  backtest/              engine.py, walk_forward.py, bias_guards.py
+  data/                  sample_data.py, market_data.py, fred_data.py, cache/
+  strategies/            base.py, 3 existing, regime_detector.py, ensemble.py
+  recommendations/       engine.py, paper_trading.py, explainability.py
+  visualization/         charts.py, walk_forward.py, regime.py, recommendations.py, macro.py
+  dashboard/             app.py, auth.py, theme.py, analysis.py, assets/
+  tests/                 mirroring each module
+  examples/              run_backtest.py, run_recommendation.py
+  output/                (gitignored: HTML charts, paper trade logs, coverage)
 ```
 
 ## Known Risks
