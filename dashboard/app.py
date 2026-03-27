@@ -239,29 +239,25 @@ def make_login_page(message=None):
                          style={"marginTop": "8px"}),
             ]),
             html.Hr(style={"borderColor": COLORS["border"], "margin": "24px 0"}),
-            html.A(
-                dbc.Button([
-                    # White Google "G" — clean on dark background
-                    html.Img(src="data:image/svg+xml,"
-                        "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E"
-                        "%3Cpath fill='%23fff' d='M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92"
-                        "a5.06 5.06 0 0 1-2.2 3.32l3.55 2.76c2.07-1.91 3.29-4.73 3.29-8.09z'/%3E"
-                        "%3Cpath fill='%23fff' d='M12 23c2.97 0 5.46-.98 7.28-2.66l-3.55-2.76"
-                        "c-.98.66-2.23 1.06-3.73 1.06-2.87 0-5.3-1.94-6.16-4.54l-3.66 2.84"
-                        "A11.99 11.99 0 0 0 12 23z'/%3E"
-                        "%3Cpath fill='%23fff' d='M5.84 14.1a7.2 7.2 0 0 1 0-4.2L2.18 7.06"
-                        "A11.99 11.99 0 0 0 0 12c0 1.94.46 3.77 1.28 5.4l3.66-2.84z'/%3E"  # noqa: E501
-                        "%3Cpath fill='%23fff' d='M12 4.75c1.62 0 3.06.56 4.21 1.64l3.15-3.15"
-                        "C17.45 1.09 14.97 0 12 0 7.31 0 3.25 2.7 1.28 6.61l3.66 2.84"
-                        "c.87-2.6 3.3-4.54 6.16-4.54z'/%3E%3C/svg%3E",  # noqa: E501
-                        style={"width": "18px", "height": "18px", "marginRight": "10px",
-                               "verticalAlign": "middle"}),
-                    html.Span("Sign in with Google",
-                              style={"verticalAlign": "middle"}),
-                ], className="btn-google"),
-                id="google-login-link",
-                href="/auth/login",
-            ),
+            dbc.Button([
+                # White Google "G" — clean on dark background
+                html.Img(src="data:image/svg+xml,"
+                    "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E"
+                    "%3Cpath fill='%23fff' d='M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92"
+                    "a5.06 5.06 0 0 1-2.2 3.32l3.55 2.76c2.07-1.91 3.29-4.73 3.29-8.09z'/%3E"
+                    "%3Cpath fill='%23fff' d='M12 23c2.97 0 5.46-.98 7.28-2.66l-3.55-2.76"
+                    "c-.98.66-2.23 1.06-3.73 1.06-2.87 0-5.3-1.94-6.16-4.54l-3.66 2.84"
+                    "A11.99 11.99 0 0 0 12 23z'/%3E"
+                    "%3Cpath fill='%23fff' d='M5.84 14.1a7.2 7.2 0 0 1 0-4.2L2.18 7.06"
+                    "A11.99 11.99 0 0 0 0 12c0 1.94.46 3.77 1.28 5.4l3.66-2.84z'/%3E"
+                    "%3Cpath fill='%23fff' d='M12 4.75c1.62 0 3.06.56 4.21 1.64l3.15-3.15"
+                    "C17.45 1.09 14.97 0 12 0 7.31 0 3.25 2.7 1.28 6.61l3.66 2.84"
+                    "c.87-2.6 3.3-4.54 6.16-4.54z'/%3E%3C/svg%3E",
+                    style={"width": "18px", "height": "18px", "marginRight": "10px",
+                           "verticalAlign": "middle"}),
+                html.Span("Sign in with Google",
+                          style={"verticalAlign": "middle"}),
+            ], href="/auth/login", className="btn-google", id="google-login-link"),
             html.Div("For returning users with linked accounts", style={
                 "color": COLORS["text_muted"], "fontSize": "11px",
                 "marginTop": "8px", "textAlign": "center",
