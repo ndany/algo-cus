@@ -51,20 +51,27 @@ if not SKIP_AUTH:
 # LAYOUT COMPONENTS
 # ============================================================
 
-def make_navbar():
+def make_navbar(show_signout=False):
+    children = [
+        dbc.NavbarBrand(
+            [html.Span("ALGO", style={"color": COLORS["accent_cyan"]}),
+             html.Span("STATION", style={"color": COLORS["text_secondary"]})],
+            className="navbar-brand",
+        ),
+        html.Div([
+            html.Span("TRADING ANALYSIS TERMINAL",
+                       style={"color": COLORS["text_muted"], "fontSize": "11px",
+                              "letterSpacing": "2px", "fontWeight": "600"}),
+        ], style={"flex": "1"}),
+    ]
+    if show_signout:
+        children.append(
+            dbc.Button("Sign out", id="signout-btn", outline=True, color="secondary",
+                       size="sm", style={"fontSize": "12px", "padding": "4px 12px"}),
+        )
     return dbc.Navbar(
-        dbc.Container([
-            dbc.NavbarBrand(
-                [html.Span("ALGO", style={"color": COLORS["accent_cyan"]}),
-                 html.Span("STATION", style={"color": COLORS["text_secondary"]})],
-                className="navbar-brand",
-            ),
-            html.Div(
-                html.Span("TRADING ANALYSIS TERMINAL",
-                           style={"color": COLORS["text_muted"], "fontSize": "11px",
-                                  "letterSpacing": "2px", "fontWeight": "600"}),
-            ),
-        ], fluid=True),
+        dbc.Container(children, fluid=True,
+                      style={"display": "flex", "alignItems": "center"}),
         className="navbar",
         dark=True,
     )
@@ -142,24 +149,20 @@ def make_login_page(message=None):
             html.Hr(style={"borderColor": COLORS["border"], "margin": "24px 0"}),
             html.A(
                 dbc.Button([
-                    html.Img(src="data:image/svg+xml;base64,"
-                        "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9"
-                        "IjAgMCA0OCA0OCI+PHBhdGggZmlsbD0iI0VBNDMzNSIgZD0iTTI0IDkuNWMzLjU0"
-                        "IDAgNi43MSAxLjIyIDkuMjEgMy42bDYuODUtNi44NUMzNS45IDIuMzggMzAuNDcg"
-                        "MCAyNCAwIDEwLjggMCA0LjAzIDUuMzggMCA4LjQ1bDcuOTggNi4xOUM5LjY0IDEy"
-                        "LjAxIDEyLjUzIDkuNSAxNCA5LjV6Ii8+PHBhdGggZmlsbD0iIzRCQkY1MCIgZD0i"
-                        "TTI0IDQ4YzYuNDggMCAxMS45My0yLjEzIDE1LjQ1LTUuNzRsLTcuOTgtNi4xOWMt"
-                        "Mi4wOCAxLjQ2LTQuNzMgMi4zOS03LjQ3IDIuMzktNC4yNiAwLTcuOTEtMi4zNy05"
-                        "LjgzLTUuODVsLTcuOTggNi4xOUM5LjQ4IDQ0LjA3IDE2LjE0IDQ4IDI0IDQ4eiIv"
-                        "PjxwYXRoIGZpbGw9IiM0MjczQzgiIGQ9Ik00Ni4xNiAyNC41Yy0uMTktMS4xNi0u"
-                        "NDktMi4yOC0uODktMy4zNEgyNHY3LjE3aDEyLjRjLS41MSAyLjc2LTIuMDkgNS4x"
-                        "My00LjIgNi41OGw3Ljk4IDYuMTljNC45NC00LjU4IDcuOTgtMTEuMzEgNy45OC0x"
-                        "Ny4xIDAtLjk1LS4wNy0xLjg4LS4xOS0yLjc5eiIvPjxwYXRoIGZpbGw9IiNGQkJD"
-                        "MDUiIGQ9Ik02LjE3IDE0LjY0bDcuOTggNi4xOWMxLjkyLTMuNDggNS41Ny01Ljg1"
-                        "IDkuODMtNS44NSAxLjk3IDAgMy44Mi41OCA1LjM0IDEuNTdsNi44NS02Ljg1QzMy"
-                        "LjU3IDYuNjIgMjguNzQgNC41IDI0IDQuNWMtNy44NiAwLTE0LjUyIDUuMDctMTYu"
-                        "ODMgMTIuMTR6Ii8+PC9zdmc+",
-                        style={"width": "18px", "height": "18px", "marginRight": "8px",
+                    # White Google "G" — clean on dark background
+                    html.Img(src="data:image/svg+xml,"
+                        "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E"
+                        "%3Cpath fill='%23fff' d='M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92"
+                        "a5.06 5.06 0 0 1-2.2 3.32l3.55 2.76c2.07-1.91 3.29-4.73 3.29-8.09z'/%3E"
+                        "%3Cpath fill='%23fff' d='M12 23c2.97 0 5.46-.98 7.28-2.66l-3.55-2.76"
+                        "c-.98.66-2.23 1.06-3.73 1.06-2.87 0-5.3-1.94-6.16-4.54l-3.66 2.84"
+                        "A11.99 11.99 0 0 0 12 23z'/%3E"
+                        "%3Cpath fill='%23fff' d='M5.84 14.1a7.2 7.2 0 0 1 0-4.2L2.18 7.06"
+                        "A11.99 11.99 0 0 0 0 12c0 1.94.46 3.77 1.28 5.4l3.66-2.84z'/%3E"  # noqa: E501
+                        "%3Cpath fill='%23fff' d='M12 4.75c1.62 0 3.06.56 4.21 1.64l3.15-3.15"
+                        "C17.45 1.09 14.97 0 12 0 7.31 0 3.25 2.7 1.28 6.61l3.66 2.84"
+                        "c.87-2.6 3.3-4.54 6.16-4.54z'/%3E%3C/svg%3E",  # noqa: E501
+                        style={"width": "18px", "height": "18px", "marginRight": "10px",
                                "verticalAlign": "middle"}),
                     html.Span("Sign in with Google",
                               style={"verticalAlign": "middle"}),
@@ -510,7 +513,7 @@ def build_strategy_detail(result, strategy_index):
 def _make_app_shell():
     """The authenticated app layout."""
     return html.Div([
-        make_navbar(),
+        make_navbar(show_signout=not SKIP_AUTH),
         make_ticker_bar(),
         dbc.Container(id="main-content", fluid=True,
                       style={"padding": "20px 24px", "maxWidth": "1400px"}),
@@ -625,6 +628,16 @@ if not SKIP_AUTH:
             "authenticated": True,
             "user": {"email": f"code:{code}", "name": "Guest"},
         }
+
+    @callback(
+        Output("auth-store", "data", allow_duplicate=True),
+        Output("page-container", "children", allow_duplicate=True),
+        Input("signout-btn", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def sign_out(n_clicks):
+        """Clear auth state and return to login page."""
+        return {}, make_login_page()
 
 
 # ============================================================
