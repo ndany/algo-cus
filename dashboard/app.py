@@ -610,12 +610,14 @@ if not SKIP_AUTH:
 
         code = code.strip().upper()
 
-        if not validate_invitation_code(code):
-            return html.Span("Invalid or already used code",
-                             style={"color": COLORS["accent_red"], "fontSize": "12px"}), no_update
-
         # If user signed in with Google, link the code to their account
         user = (auth_data or {}).get("google_user")
+        identity = user["email"] if user else f"code:{code}"
+
+        if not validate_invitation_code(code, user_identity=identity):
+            return html.Span("Invalid or already claimed by another user",
+                             style={"color": COLORS["accent_red"], "fontSize": "12px"}), no_update
+
         if user:
             consume_invitation_code(code, user["email"])
             register_authorized_user(user["id"], user["email"], user["name"])
@@ -623,10 +625,10 @@ if not SKIP_AUTH:
             return no_update, {"authenticated": True, "user": user, "token": token}
 
         # No Google sign-in — grant access with code only
-        consume_invitation_code(code, f"code:{code}")
+        consume_invitation_code(code, identity)
         return no_update, {
             "authenticated": True,
-            "user": {"email": f"code:{code}", "name": "Guest"},
+            "user": {"email": identity, "name": "Guest"},
         }
 
     @callback(

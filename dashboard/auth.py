@@ -78,11 +78,12 @@ def get_user_from_token(access_token: str) -> dict | None:
     return None
 
 
-def validate_invitation_code(code: str) -> bool:
-    """Check if an invitation code exists (used or unused).
+def validate_invitation_code(code: str, user_identity: str | None = None) -> bool:
+    """Check if an invitation code is available for this user.
 
-    Codes are reusable — knowing a valid code is sufficient to log in.
-    The 'used' flag tracks first-use for auditing, not access control.
+    A code is valid if:
+      - It exists and has never been used (new user), OR
+      - It was previously used by the same user_identity (re-login)
 
     Expects a Supabase table 'invitation_codes' with columns:
         code (text, unique), used (boolean), used_by (text, nullable)
@@ -91,11 +92,20 @@ def validate_invitation_code(code: str) -> bool:
         sb = get_supabase()
         result = (
             sb.table("invitation_codes")
-            .select("code")
+            .select("code, used, used_by")
             .eq("code", code)
             .execute()
         )
-        return len(result.data) > 0
+        if not result.data:
+            return False
+        row = result.data[0]
+        # Unused code — available to anyone
+        if not row["used"]:
+            return True
+        # Already used — only the original owner can re-use it
+        if user_identity and row.get("used_by") == user_identity:
+            return True
+        return False
     except Exception as e:
         logger.error(f"Invitation code check failed: {e}")
         return False
