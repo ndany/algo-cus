@@ -283,7 +283,7 @@ def make_login_page(message=None):
                            "verticalAlign": "middle"}),
                 html.Span("Sign in with Google",
                           style={"verticalAlign": "middle"}),
-            ], href="/auth/login", className="btn-google", id="google-login-link"),
+            ], href="/auth/login", external_link=True, className="btn-google", id="google-login-link"),
             html.Div("For returning users with linked accounts", style={
                 "color": COLORS["text_muted"], "fontSize": "11px",
                 "marginTop": "8px", "textAlign": "center",
