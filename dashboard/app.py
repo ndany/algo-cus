@@ -88,6 +88,26 @@ class _AuthAndProxyMiddleware:
         from werkzeug.wrappers import Request
         req = Request(environ)
 
+        if path == "/auth/session-test":
+            with self.flask_app.request_context(environ):
+                from flask import session
+                from werkzeug.wrappers import Response as WerkzeugResponse
+                session["test_key"] = "test_value"
+                resp = WerkzeugResponse("ok", status=200)
+                si = self.flask_app.session_interface
+                si.save_session(self.flask_app, session, resp)
+                headers = dict(resp.headers)
+                # Return debug info
+                import json
+                body = json.dumps({
+                    "session_modified": session.modified,
+                    "has_secret_key": bool(self.flask_app.secret_key),
+                    "cookie_header": headers.get("Set-Cookie", "(none)"),
+                    "all_headers": dict(resp.headers),
+                }).encode()
+                start_response("200 OK", [("Content-Type", "application/json")])
+                return [body]
+
         if path == "/auth/diag":
             import json
             body = json.dumps({
