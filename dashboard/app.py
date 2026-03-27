@@ -41,7 +41,6 @@ SKIP_AUTH = os.environ.get("SKIP_AUTH", "1") == "1"
 if not SKIP_AUTH:
     from dashboard.auth import (
         get_google_authorize_url, exchange_code_for_session,
-        get_user_from_token,
         validate_invitation_code, consume_invitation_code,
         register_authorized_user, is_user_authorized,
     )
