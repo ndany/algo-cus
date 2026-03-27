@@ -236,8 +236,10 @@ class TestAuthModule:
         """auth.py should be importable without Supabase credentials."""
         import dashboard.auth as auth_mod
         assert hasattr(auth_mod, "validate_invitation_code")
-        assert hasattr(auth_mod, "get_google_login_url")
+        assert hasattr(auth_mod, "get_google_authorize_url")
+        assert hasattr(auth_mod, "exchange_code_for_session")
         assert hasattr(auth_mod, "get_user_from_token")
+        assert hasattr(auth_mod, "generate_pkce")
 
     def test_get_supabase_requires_env_vars(self):
         """get_supabase should raise if SUPABASE_URL/KEY are missing."""

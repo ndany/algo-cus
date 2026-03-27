@@ -1,18 +1,19 @@
 """
 Supabase authentication module.
 
-Handles Google OAuth flow and invitation code validation.
+Handles Google OAuth flow (PKCE) and invitation code validation.
 Requires environment variables:
     SUPABASE_URL      — Your Supabase project URL
     SUPABASE_KEY      — Your Supabase anon/public key
 """
 
 import os
+import base64
+import hashlib
 import logging
-from functools import wraps
+import secrets
 
 from supabase import create_client, Client
-from supabase.lib.client_options import SyncClientOptions
 
 logger = logging.getLogger(__name__)
 
@@ -31,36 +32,65 @@ def get_supabase() -> Client:
                 "SUPABASE_URL and SUPABASE_KEY environment variables are required. "
                 "Get these from your Supabase project settings."
             )
-        # Use implicit flow so Supabase returns #access_token in the URL
-        # fragment instead of ?code (PKCE). PKCE requires a code_verifier
-        # persisted across requests, which doesn't work in stateless Dash callbacks.
-        options = SyncClientOptions(flow_type="implicit")
-        _client = create_client(url, key, options=options)
+        _client = create_client(url, key)
     return _client
 
 
-def get_google_login_url(redirect_to: str) -> str:
-    """Generate the Google OAuth login URL via Supabase.
+def generate_pkce():
+    """Generate PKCE code_verifier and code_challenge for OAuth."""
+    code_verifier = secrets.token_urlsafe(64)
+    code_challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
+        .rstrip(b"=")
+        .decode()
+    )
+    return code_verifier, code_challenge
 
-    Constructs the URL directly with response_type=token to force
-    implicit flow. The SDK's sign_in_with_oauth may default to PKCE
-    regardless of flow_type, and PKCE requires a code_verifier that
-    can't be reliably persisted across Dash's stateless callbacks.
 
-    Args:
-        redirect_to: URL to redirect to after successful auth.
+def get_google_authorize_url(redirect_to: str) -> tuple[str, str]:
+    """Build the Google OAuth authorize URL with PKCE.
 
     Returns:
-        The OAuth URL to redirect the user to.
+        (authorize_url, code_verifier) — caller must persist code_verifier
+        in the Flask session for the callback to exchange the code.
     """
     from urllib.parse import quote
+
     url = os.environ.get("SUPABASE_URL")
-    return (
+    code_verifier, code_challenge = generate_pkce()
+    authorize_url = (
         f"{url}/auth/v1/authorize"
         f"?provider=google"
         f"&redirect_to={quote(redirect_to)}"
-        f"&response_type=token"
+        f"&code_challenge={code_challenge}"
+        f"&code_challenge_method=s256"
     )
+    return authorize_url, code_verifier
+
+
+def exchange_code_for_session(auth_code: str, code_verifier: str) -> dict | None:
+    """Exchange a Supabase auth code + PKCE verifier for a user session.
+
+    Returns:
+        Dict with user info (id, email, name) or None if exchange failed.
+    """
+    try:
+        sb = get_supabase()
+        response = sb.auth.exchange_code_for_session({
+            "auth_code": auth_code,
+            "code_verifier": code_verifier,
+        })
+        if response and response.user:
+            user = response.user
+            return {
+                "id": user.id,
+                "email": user.email,
+                "name": user.user_metadata.get("full_name", user.email),
+                "avatar": user.user_metadata.get("avatar_url", ""),
+            }
+    except Exception as e:
+        logger.error(f"Code exchange failed: {e}")
+    return None
 
 
 def get_user_from_token(access_token: str) -> dict | None:

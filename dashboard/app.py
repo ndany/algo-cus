@@ -40,11 +40,16 @@ server = app.server  # Expose for gunicorn
 SKIP_AUTH = os.environ.get("SKIP_AUTH", "1") == "1"
 
 if not SKIP_AUTH:
+    import secrets as _secrets
+    from flask import redirect, request, session
     from dashboard.auth import (
-        get_google_login_url, get_user_from_token,
+        get_google_authorize_url, exchange_code_for_session,
+        get_user_from_token,
         validate_invitation_code, consume_invitation_code,
         register_authorized_user, is_user_authorized,
     )
+    # Flask session secret for PKCE code_verifier storage
+    server.secret_key = os.environ.get("FLASK_SECRET_KEY", _secrets.token_hex(32))
 
 
 # ============================================================
@@ -168,7 +173,7 @@ def make_login_page(message=None):
                               style={"verticalAlign": "middle"}),
                 ], className="btn-google"),
                 id="google-login-link",
-                href="#",
+                href="/auth/login",
             ),
             html.Div("For returning users with linked accounts", style={
                 "color": COLORS["text_muted"], "fontSize": "11px",
@@ -544,6 +549,45 @@ else:
 # ============================================================
 
 if not SKIP_AUTH:
+    # --- Flask routes for OAuth PKCE flow ---
+    # These run server-side so the code_verifier can be stored in Flask session.
+
+    @server.route("/auth/login")
+    def auth_login():
+        """Start the Google OAuth flow. Generates PKCE params, stores
+        code_verifier in Flask session, redirects to Supabase authorize."""
+        callback_url = request.url_root.rstrip("/") + "/auth/callback"
+        authorize_url, code_verifier = get_google_authorize_url(callback_url)
+        session["code_verifier"] = code_verifier
+        return redirect(authorize_url)
+
+    @server.route("/auth/callback")
+    def auth_callback():
+        """Handle the OAuth callback. Exchanges auth code for session."""
+        auth_code = request.args.get("code")
+        code_verifier = session.pop("code_verifier", None)
+
+        if not auth_code or not code_verifier:
+            logger.warning(f"OAuth callback missing params: code={bool(auth_code)}, verifier={bool(code_verifier)}")
+            return redirect("/")
+
+        user = exchange_code_for_session(auth_code, code_verifier)
+        if not user:
+            logger.warning("OAuth code exchange failed")
+            return redirect("/")
+
+        # Auto-register on first Google sign-in
+        if not is_user_authorized(user["id"]):
+            register_authorized_user(user["id"], user["email"],
+                                     user.get("name", user["email"]))
+
+        # Store auth in Flask session so route_page can read it
+        session["authenticated"] = True
+        session["user"] = user
+        return redirect("/")
+
+    # --- Dash callbacks ---
+
     @callback(
         Output("page-container", "children"),
         Output("auth-store", "data"),
@@ -551,50 +595,20 @@ if not SKIP_AUTH:
         State("auth-store", "data"),
     )
     def route_page(href, auth_data):
-        """Show login or app based on auth state and URL tokens."""
-        # Already authenticated via session store
+        """Show login or app based on auth state."""
+        # Check Dash session store
         if auth_data and auth_data.get("authenticated"):
             return _make_app_shell(), auth_data
 
-        logger.info(f"route_page: href={'[has access_token]' if href and 'access_token' in href else href and href[:80] or 'None'}")
+        # Check Flask session (set by /auth/callback)
+        if session.get("authenticated"):
+            user = session.get("user", {})
+            # Transfer to Dash store and clear Flask session
+            session.pop("authenticated", None)
+            session.pop("user", None)
+            return _make_app_shell(), {"authenticated": True, "user": user}
 
-        # Check for OAuth callback with access_token in URL fragment
-        # (implicit flow returns #access_token=...&token_type=...)
-        if href and "access_token=" in href:
-            from urllib.parse import urlparse, parse_qs
-            fragment = urlparse(href).fragment
-            params = parse_qs(fragment)
-            token = params.get("access_token", [None])[0]
-
-            if token:
-                user = get_user_from_token(token)
-                if user:
-                    # Auto-register on first Google sign-in
-                    if not is_user_authorized(user["id"]):
-                        register_authorized_user(user["id"], user["email"],
-                                                 user.get("name", user["email"]))
-                    return _make_app_shell(), {
-                        "authenticated": True,
-                        "user": user,
-                        "token": token,
-                    }
-
-        # Not authenticated — show login page
         return make_login_page(), no_update
-
-    @callback(
-        Output("google-login-link", "href"),
-        Input("url", "href"),
-    )
-    def set_google_login_url(href):
-        """Generate the Google OAuth URL with the current page as redirect."""
-        if not href:
-            return "#"
-        try:
-            return get_google_login_url(redirect_to=href.split("#")[0])
-        except Exception as e:
-            logger.warning(f"Failed to generate Google login URL: {e}")
-            return "#"
 
     @callback(
         Output("invitation-status", "children"),
@@ -641,6 +655,7 @@ if not SKIP_AUTH:
     )
     def sign_out(n_clicks):
         """Clear auth state and return to login page."""
+        session.clear()
         return {}, make_login_page()
 
 
