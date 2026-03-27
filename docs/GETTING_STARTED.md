@@ -34,7 +34,7 @@ Open `output/coverage/index.html` in your browser to explore the coverage report
 ## 3. Launch the Dashboard (Quickest Way to See Everything)
 
 ```bash
-SKIP_AUTH=1 python dashboard/app.py
+SKIP_AUTH=1 python -m dashboard.app
 ```
 
 Open http://localhost:8050 in your browser.

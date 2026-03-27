@@ -33,8 +33,15 @@ server = app.server  # Expose for gunicorn
 
 
 # --- Auth Check ---
-# In production, wrap with Supabase auth. For local dev, set SKIP_AUTH=1.
+# Set SKIP_AUTH=1 for local dev (no Supabase needed). In production, set SKIP_AUTH=0.
 SKIP_AUTH = os.environ.get("SKIP_AUTH", "1") == "1"
+
+if not SKIP_AUTH:
+    from dashboard.auth import (
+        get_google_login_url, get_user_from_token,
+        validate_invitation_code, consume_invitation_code,
+        register_authorized_user, is_user_authorized,
+    )
 
 
 # ============================================================
@@ -98,7 +105,6 @@ def make_ticker_bar():
 
 
 def make_login_page():
-    login_url = os.environ.get("SUPABASE_LOGIN_URL", "#")
     return html.Div([
         html.Div([
             html.Div("ALGOSTATION", className="login-title"),
@@ -108,11 +114,12 @@ def make_login_page():
                     [html.Span("Sign in with Google")],
                     className="btn-google",
                 ),
-                href=login_url,
+                id="google-login-link",
+                href="#",
             ),
             html.Hr(style={"borderColor": COLORS["border"], "margin": "24px 0"}),
             html.Div([
-                html.Div("Enter invitation code", style={
+                html.Div("Or enter an invitation code", style={
                     "color": COLORS["text_secondary"], "fontSize": "12px",
                     "marginBottom": "8px",
                 }),
@@ -129,6 +136,7 @@ def make_login_page():
                     style={"marginTop": "12px", "width": "100%"},
                     n_clicks=0,
                 ),
+                html.Div(id="invitation-status", style={"marginTop": "8px"}),
             ]),
         ], className="login-card"),
     ], className="login-container")
@@ -441,7 +449,7 @@ def build_strategy_detail(result, strategy_index):
     return html.Div([
         dbc.Button(
             "← Back to Summary",
-            id="back-to-summary",
+            id={"type": "back-btn", "index": 0},
             outline=True,
             color="secondary",
             size="sm",
@@ -465,15 +473,129 @@ def build_strategy_detail(result, strategy_index):
 # APP LAYOUT
 # ============================================================
 
-app.layout = html.Div([
-    dcc.Store(id="analysis-store"),
-    dcc.Store(id="selected-strategy", data=-1),
-    dcc.Location(id="url", refresh=False),
-    make_navbar(),
-    make_ticker_bar(),
-    dbc.Container(id="main-content", fluid=True,
-                  style={"padding": "20px 24px", "maxWidth": "1400px"}),
-])
+
+def _make_app_shell():
+    """The authenticated app layout."""
+    return html.Div([
+        make_navbar(),
+        make_ticker_bar(),
+        dbc.Container(id="main-content", fluid=True,
+                      style={"padding": "20px 24px", "maxWidth": "1400px"}),
+    ])
+
+
+if SKIP_AUTH:
+    # No auth — go straight to the app
+    app.layout = html.Div([
+        dcc.Store(id="analysis-store"),
+        dcc.Store(id="selected-strategy", data=-1),
+        dcc.Location(id="url", refresh=False),
+        _make_app_shell(),
+    ])
+else:
+    # Auth enabled — page-container swaps between login and app
+    app.layout = html.Div([
+        dcc.Store(id="analysis-store"),
+        dcc.Store(id="selected-strategy", data=-1),
+        dcc.Store(id="auth-store", storage_type="session"),
+        dcc.Location(id="url", refresh=False),
+        html.Div(id="page-container"),
+    ])
+
+
+# ============================================================
+# AUTH CALLBACKS (only when auth is enabled)
+# ============================================================
+
+if not SKIP_AUTH:
+    @callback(
+        Output("page-container", "children"),
+        Output("auth-store", "data"),
+        Input("url", "href"),
+        State("auth-store", "data"),
+    )
+    def route_page(href, auth_data):
+        """Show login or app based on auth state and URL tokens."""
+        # Already authenticated via session store
+        if auth_data and auth_data.get("authenticated"):
+            return _make_app_shell(), auth_data
+
+        # Check for OAuth callback with access_token in URL fragment
+        # Supabase redirects with #access_token=...&token_type=...
+        # URL fragments aren't sent to server, but dcc.Location captures them
+        if href and "access_token=" in href:
+            # Extract token from fragment
+            from urllib.parse import urlparse, parse_qs
+            fragment = urlparse(href).fragment
+            params = parse_qs(fragment)
+            token = params.get("access_token", [None])[0]
+
+            if token:
+                user = get_user_from_token(token)
+                if user and is_user_authorized(user["id"]):
+                    return _make_app_shell(), {
+                        "authenticated": True,
+                        "user": user,
+                        "token": token,
+                    }
+                elif user:
+                    # Valid Google user but no invitation code used yet
+                    return make_login_page(), {
+                        "google_user": user,
+                        "token": token,
+                    }
+
+        # Not authenticated — show login page
+        return make_login_page(), no_update
+
+    @callback(
+        Output("google-login-link", "href"),
+        Input("url", "href"),
+    )
+    def set_google_login_url(href):
+        """Generate the Google OAuth URL with the current page as redirect."""
+        if not href:
+            return "#"
+        try:
+            return get_google_login_url(redirect_to=href.split("#")[0])
+        except Exception as e:
+            logger.warning(f"Failed to generate Google login URL: {e}")
+            return "#"
+
+    @callback(
+        Output("invitation-status", "children"),
+        Output("auth-store", "data", allow_duplicate=True),
+        Input("verify-code-btn", "n_clicks"),
+        State("invitation-code", "value"),
+        State("auth-store", "data"),
+        prevent_initial_call=True,
+    )
+    def verify_invitation(n_clicks, code, auth_data):
+        """Validate an invitation code and grant access."""
+        if not code or not code.strip():
+            return html.Span("Enter a code",
+                             style={"color": COLORS["accent_orange"], "fontSize": "12px"}), no_update
+
+        code = code.strip().upper()
+
+        if not validate_invitation_code(code):
+            return html.Span("Invalid or already used code",
+                             style={"color": COLORS["accent_red"], "fontSize": "12px"}), no_update
+
+        # If user signed in with Google, link the code to their account
+        user = (auth_data or {}).get("google_user")
+        if user:
+            consume_invitation_code(code, user["email"])
+            register_authorized_user(user["id"], user["email"], user["name"])
+            token = (auth_data or {}).get("token", "")
+            return no_update, {"authenticated": True, "user": user, "token": token}
+
+        # No Google sign-in — grant access with code only
+        consume_invitation_code(code, f"code:{code}")
+        return no_update, {
+            "authenticated": True,
+            "user": {"email": f"code:{code}", "name": "Guest"},
+        }
 
 
 # ============================================================
@@ -545,10 +667,11 @@ def render_main(store_data, selected_strategy):
     if not store_data:
         return make_empty_state()
 
+    import io
     import pandas as pd
 
-    # Reconstruct DataFrames from JSON
-    data = pd.read_json(store_data["data_json"])
+    # Reconstruct DataFrames from JSON (StringIO required — pandas treats raw strings as file paths)
+    data = pd.read_json(io.StringIO(store_data["data_json"]))
     data = data.sort_values("Date").reset_index(drop=True)
 
     result = {
@@ -560,8 +683,8 @@ def render_main(store_data, selected_strategy):
     }
 
     for sr in store_data["strategies"]:
-        signals_df = pd.read_json(sr["signals_json"]).sort_values("Date").reset_index(drop=True)
-        results_df = pd.read_json(sr["results_json"]).sort_values("Date").reset_index(drop=True)
+        signals_df = pd.read_json(io.StringIO(sr["signals_json"])).sort_values("Date").reset_index(drop=True)
+        results_df = pd.read_json(io.StringIO(sr["results_json"])).sort_values("Date").reset_index(drop=True)
         result["strategies"].append({
             "name": sr["name"],
             "signals_df": signals_df,
@@ -591,17 +714,17 @@ def render_main(store_data, selected_strategy):
 @callback(
     Output("selected-strategy", "data"),
     Input({"type": "strategy-card", "index": dash.ALL}, "n_clicks"),
-    Input("back-to-summary", "n_clicks"),
+    Input({"type": "back-btn", "index": dash.ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def handle_navigation(card_clicks, back_click):
+def handle_navigation(card_clicks, back_clicks):
     ctx = dash.callback_context
     if not ctx.triggered:
         return no_update
 
     trigger = ctx.triggered[0]["prop_id"]
 
-    if "back-to-summary" in trigger:
+    if "back-btn" in trigger:
         return -1
 
     # Parse which strategy card was clicked

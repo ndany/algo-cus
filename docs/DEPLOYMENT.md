@@ -45,9 +45,35 @@ User → Render (free tier, single process)
 
 1. Create a free Supabase project at https://supabase.com
 2. Enable Google OAuth:
-   - Supabase Dashboard → Authentication → Providers → Google
-   - Create Google OAuth credentials at https://console.cloud.google.com
+   - Supabase Dashboard → Authentication → Providers → Google → Enable toggle
+   - Create Google OAuth credentials (see steps below)
+   - Paste the **Client ID** and **Client Secret** into the Supabase Google provider form
    - Set the redirect URL to your Render app URL + `/auth/callback`
+
+   **Creating Google OAuth Credentials:**
+
+   a. Go to https://console.cloud.google.com and create a new project (or select an existing one)
+      - Project name: e.g. `AlgoStation` (any name works, users won't see this)
+   b. Navigate to **APIs & Services → OAuth consent screen**
+      - User type: **External** (unless you have Google Workspace and want to restrict to your org)
+      - App name: `AlgoStation` (shown to users on the Google sign-in page)
+      - User support email: your email
+      - App logo: optional, skip for now
+      - App domain / Authorized domains: add your Render domain (e.g. `your-app.onrender.com`)
+      - Developer contact email: your email
+      - Scopes: click **Add or Remove Scopes** → select `email` and `profile` (`.../auth/userinfo.email` and `.../auth/userinfo.profile`) → Save
+      - Test users: add your own email (required while in "Testing" status — only listed test users can sign in until you publish the app)
+      - Click **Save and Continue** through to the summary, then **Back to Dashboard**
+   c. Navigate to **APIs & Services → Credentials**
+      - Click **+ Create Credentials → OAuth client ID**
+      - Application type: **Web application**
+      - Name: `AlgoStation Web` (internal label, anything works)
+      - Authorized JavaScript origins: add `https://your-app.onrender.com` (and `http://localhost:8050` for local dev)
+      - Authorized redirect URIs: copy the exact callback URL from the Supabase Google provider form — it looks like `https://<your-supabase-ref>.supabase.co/auth/v1/callback`
+      - Click **Create**
+   d. Copy the **Client ID** and **Client Secret** from the dialog that appears — paste these into Supabase
+
+   > **Publishing note:** While the app is in "Testing" status, only emails you added as test users can sign in. To allow anyone with a Google account, go back to OAuth consent screen → **Publish App**. Google may show an "unverified app" warning to users — this is normal for small projects and doesn't require verification unless you exceed 100 users.
 3. Create the invitation codes table:
    ```sql
    CREATE TABLE invitation_codes (

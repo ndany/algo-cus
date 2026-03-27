@@ -41,7 +41,7 @@ Charts are saved as interactive HTML files in `output/`.
 ## Running the Dashboard
 
 ```bash
-SKIP_AUTH=1 python dashboard/app.py        # Local dev (no auth)
+SKIP_AUTH=1 python -m dashboard.app        # Local dev (no auth)
 gunicorn dashboard.app:server              # Production
 ```
 

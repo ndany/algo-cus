@@ -12,7 +12,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # Launch the dashboard
-SKIP_AUTH=1 python dashboard/app.py
+SKIP_AUTH=1 python -m dashboard.app
 # Open http://localhost:8050
 ```
 
