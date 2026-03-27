@@ -34,6 +34,11 @@ app = dash.Dash(
 )
 server = app.server  # Expose for gunicorn
 
+# Trust X-Forwarded-* headers from Render's load balancer so that
+# request.url_root returns https:// instead of http://.
+from werkzeug.middleware.proxy_fix import ProxyFix
+server.wsgi_app = ProxyFix(server.wsgi_app, x_proto=1, x_host=1)
+
 
 # --- Auth Check ---
 # Set SKIP_AUTH=1 for local dev (no Supabase needed). In production, set SKIP_AUTH=0.
@@ -562,6 +567,7 @@ if not SKIP_AUTH:
         callback_url = request.url_root.rstrip("/") + "/auth/callback"
         authorize_url, code_verifier = get_google_authorize_url(callback_url)
         session["code_verifier"] = code_verifier
+        logger.info(f"auth_login: redirect_to={callback_url}")
         return redirect(authorize_url)
 
     @server.route("/auth/callback")
@@ -569,6 +575,7 @@ if not SKIP_AUTH:
         """Handle the OAuth callback. Exchanges auth code for session."""
         auth_code = request.args.get("code")
         code_verifier = session.pop("code_verifier", None)
+        logger.info(f"auth_callback: code={bool(auth_code)}, verifier={bool(code_verifier)}")
 
         if not auth_code or not code_verifier:
             logger.warning(f"OAuth callback missing params: code={bool(auth_code)}, verifier={bool(code_verifier)}")
