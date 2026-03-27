@@ -79,7 +79,10 @@ def get_user_from_token(access_token: str) -> dict | None:
 
 
 def validate_invitation_code(code: str) -> bool:
-    """Check if an invitation code is valid and unused.
+    """Check if an invitation code exists (used or unused).
+
+    Codes are reusable — knowing a valid code is sufficient to log in.
+    The 'used' flag tracks first-use for auditing, not access control.
 
     Expects a Supabase table 'invitation_codes' with columns:
         code (text, unique), used (boolean), used_by (text, nullable)
@@ -88,9 +91,8 @@ def validate_invitation_code(code: str) -> bool:
         sb = get_supabase()
         result = (
             sb.table("invitation_codes")
-            .select("code, used")
+            .select("code")
             .eq("code", code)
-            .eq("used", False)
             .execute()
         )
         return len(result.data) > 0
@@ -100,7 +102,7 @@ def validate_invitation_code(code: str) -> bool:
 
 
 def consume_invitation_code(code: str, user_email: str) -> bool:
-    """Mark an invitation code as used.
+    """Mark an invitation code as used on first use. No-op on subsequent uses.
 
     Returns True if successful.
     """
@@ -109,7 +111,7 @@ def consume_invitation_code(code: str, user_email: str) -> bool:
         sb.table("invitation_codes").update({
             "used": True,
             "used_by": user_email,
-        }).eq("code", code).execute()
+        }).eq("code", code).eq("used", False).execute()
         return True
     except Exception as e:
         logger.error(f"Failed to consume invitation code: {e}")
