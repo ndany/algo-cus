@@ -1,5 +1,6 @@
 """Tests for telemetry module."""
 
+from unittest.mock import patch
 import pytest
 
 
@@ -23,11 +24,13 @@ class TestTelemetryModule:
         assert "invalid_code" in ATTEMPT_TYPES
         assert "auth_failed" in ATTEMPT_TYPES
 
-    def test_log_usage_without_supabase_does_not_raise(self):
+    @patch("dashboard.telemetry._get_client", return_value=None)
+    def test_log_usage_without_supabase_does_not_raise(self, mock_client):
         """Telemetry is fire-and-forget — errors are swallowed."""
         from dashboard.telemetry import log_usage
         log_usage("test@example.com", "login", detail="test", user_name="Test")
 
-    def test_log_access_attempt_without_supabase_does_not_raise(self):
+    @patch("dashboard.telemetry._get_client", return_value=None)
+    def test_log_access_attempt_without_supabase_does_not_raise(self, mock_client):
         from dashboard.telemetry import log_access_attempt
         log_access_attempt("test@example.com", "no_code", name="Test")
