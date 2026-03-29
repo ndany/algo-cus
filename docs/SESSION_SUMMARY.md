@@ -218,6 +218,87 @@ Updated `docs/PLAN.md`:
 - Added known risks for fundamental data availability and LBO model sensitivity
 - Updated final directory structure with all new files
 
+---
+
+### Session 3 — Telemetry, Reporting, Roles, and Auth Flow Redesign (2026-03-28)
+
+**Branch**: `feature/usage-telemetry`
+
+#### 1. Usage Telemetry
+
+Implemented fire-and-forget telemetry that logs user actions to Supabase without blocking the user experience. All telemetry functions swallow errors silently.
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `usage_log` | Tracks authenticated user actions | `user_email`, `action` (login/analyze/analyze_error), `detail`, `created_at` |
+| `access_attempts` | Tracks rejected access attempts | `email`, `attempt_type` (no_code/invalid_code/auth_failed), `code_provided`, `created_at` |
+
+Module: `dashboard/telemetry.py` — `log_usage()` and `log_access_attempt()`.
+
+#### 2. SQL Migrations
+
+Created `sql/migrations/` with numbered, idempotent migration files:
+
+| Migration | Purpose |
+|-----------|---------|
+| `001_auth_tables.sql` | `invitation_codes` and `authorized_users` tables |
+| `002_telemetry.sql` | `usage_log` and `access_attempts` tables with indexes |
+| `003_user_roles.sql` | Adds `role` column to `authorized_users` (default: `'user'`) |
+| `004_reporting_functions.sql` | Server-side PostgreSQL functions for aggregated reporting queries |
+
+Migrations use `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, and `CREATE OR REPLACE FUNCTION` for idempotency.
+
+#### 3. User Roles
+
+Added a `role` column (`admin`/`user`) to `authorized_users`. Role is fetched at login via `get_user_with_role()` and stored in the Flask session. New users default to `'user'` role. Admin role must be set manually via SQL.
+
+#### 4. Admin Reports Page
+
+Dashboard includes an admin-only "Reports" link in the navbar. Reports page uses tabbed layout (via `dash_bootstrap_components`):
+- **Active Users** — who is using the platform, action counts, last seen (configurable lookback)
+- **Top Tickers** — most analyzed tickers by total analyses and unique users
+- **Expressed Interest** — unregistered users who tried to access (potential invitees)
+- **Login Frequency** — per-user login counts and first/last login timestamps
+
+All tabs query Supabase RPC functions defined in `004_reporting_functions.sql`.
+
+#### 5. CLI Reporting Script
+
+`scripts/report.py` provides the same four reports as the dashboard in a terminal-friendly table format. Shares query logic via `dashboard/reporting.py`. Requires `SUPABASE_URL` and `SUPABASE_KEY` env vars.
+
+#### 6. Auth Flow Redesign
+
+Moved all auth handling to a WSGI middleware (`_AuthAndProxyMiddleware` in `dashboard/app.py`). Key design:
+- Auth operates at the WSGI layer, outside Dash's middleware — unauthenticated users see plain HTML, not Dash pages
+- Google sign-in is always required (no anonymous access)
+- Invitation codes are only needed for first-time users. Returning authorized users skip the code check entirely
+- Login page is plain HTML, not a Dash layout — zero Dash involvement in the auth flow
+- User role is fetched from `authorized_users` at login and stored in the Flask session
+- Telemetry events are logged at each auth touchpoint (login, first_login, rejected attempts)
+
+#### What Was Built
+
+| File | What It Does |
+|------|-------------|
+| `dashboard/telemetry.py` | Fire-and-forget logging to `usage_log` and `access_attempts` |
+| `dashboard/reporting.py` | Shared query functions for reporting (used by dashboard + CLI) |
+| `scripts/report.py` | CLI tool for querying usage telemetry reports |
+| `sql/migrations/001-004` | Idempotent SQL migrations for auth, telemetry, roles, reporting |
+| `dashboard/app.py` | Updated: WSGI auth middleware, admin reports page, role-aware navbar |
+| `dashboard/auth.py` | Updated: `get_user_with_role()` for role-aware auth |
+| `docs/TELEMETRY.md` | Telemetry architecture documentation |
+
+#### Key Design Decisions (16-21)
+
+16. **Telemetry is fire-and-forget**: All telemetry calls swallow exceptions. Logging a failed analysis attempt must never prevent the user from seeing their error message.
+17. **Reporting queries are server-side RPC functions**: Aggregation runs in PostgreSQL via `sb.rpc()`, not client-side. Keeps query logic in SQL where it belongs and avoids pulling raw rows to the application.
+18. **Shared reporting module**: `dashboard/reporting.py` is used by both the dashboard Reports page and `scripts/report.py`. Single source of truth for query logic.
+19. **Auth at WSGI layer, not Dash callbacks**: Dash wraps `server.wsgi_app` with its own middleware that intercepts all requests. Flask `before_request` hooks never fire. Auth must operate at the WSGI layer to intercept requests before Dash sees them.
+20. **Invitation code only for first-time users**: Returning users in `authorized_users` skip the code check. This prevents the friction of needing a code on every login while still gating new registrations.
+21. **Roles are manual-only**: Admin role must be set via SQL (`UPDATE authorized_users SET role = 'admin' WHERE email = '...'`). No self-service role escalation.
+
+---
+
 #### Key Design Decisions (11-15)
 
 11. **DataProvider ABC**: All data sources (OHLCV, fundamentals, FRED) will share a common interface with `fetch()` and `data_contract()`. `DataEnricher` merges multi-frequency data via forward-fill.

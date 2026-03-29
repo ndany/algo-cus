@@ -340,6 +340,33 @@ body {
     font-weight: 600;
 }
 
+/* --- Sign-out Button (slate, matches terminal label) --- */
+.btn-signout {
+    background: transparent !important;
+    border: 1px solid #475569 !important;
+    color: #475569 !important;
+    font-size: 12px !important;
+    padding: 4px 12px !important;
+    border-radius: 4px !important;
+    transition: all 0.2s;
+}
+.btn-signout:hover {
+    border-color: #94a3b8 !important;
+    color: #94a3b8 !important;
+}
+
+/* --- Reports Link --- */
+.reports-link {
+    color: #475569 !important;
+    text-decoration: none !important;
+    font-size: 13px !important;
+    margin-right: 16px !important;
+    transition: color 0.2s;
+}
+.reports-link:hover {
+    color: #94a3b8 !important;
+}
+
 /* --- Responsive --- */
 @media (max-width: 768px) {
     .metric-value {

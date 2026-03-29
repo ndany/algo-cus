@@ -198,3 +198,20 @@ def is_user_authorized(user_id: str) -> bool:
     except Exception as e:
         logger.error(f"Authorization check failed: {e}")
         return False
+
+
+def get_user_with_role(user_id: str) -> dict | None:
+    """Get user record including role from authorized_users."""
+    try:
+        sb = get_supabase()
+        result = (
+            sb.table("authorized_users")
+            .select("user_id, email, name, role")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if result.data:
+            return result.data[0]
+    except Exception as e:
+        logger.error(f"get_user_with_role failed: {e}")
+    return None
