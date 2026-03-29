@@ -70,7 +70,7 @@ visualization/         Standalone plotly chart modules
 dashboard/             Dash web app (dark theme, Supabase auth, admin reports)
 scripts/               CLI tools (report.py for usage telemetry)
 sql/                   Supabase SQL migrations (auth tables, telemetry, roles, reporting functions)
-tests/                 75 tests, 88% coverage
+tests/                 121 tests, 88% coverage
 docs/                  Plan, deployment guide, getting started, session notes
 ```
 

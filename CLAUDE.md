@@ -95,7 +95,7 @@ output/             Gitignored — HTML charts, coverage reports, paper trade lo
 
 - **Project target**: 88% overall (no PR should drop below this)
 - **Per-module minimum**: 60% — modules below this need a documented justification or a plan to address
-- **Per-issue coverage**: When creating issues that add or modify code, include file-level coverage targets in the Acceptance Criteria (e.g., "new `data/providers/base.py` must have 88%+ coverage", "modified files must not drop below current coverage"). Exceptions may be made with a note citing which phase completes the implementation and brings code coverage within defined targets.
+- **Per-issue coverage**: When creating issues that add or modify code, include file-level coverage targets in the Acceptance Criteria (e.g., "new `strategies/registry.py` must have 88%+ coverage", "modified files must not drop below current coverage"). Exceptions may be made with a note citing which phase completes the implementation and brings code coverage within defined targets.
 
 ## Conventions
 
