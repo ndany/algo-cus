@@ -116,6 +116,9 @@ Evolve this educational trading algorithm project into a full recommendation eng
 - Walk-forward and bias guards use copies during grid search instead of mutating shared state
 - Eliminates 3 save/restore boilerplate blocks and prevents concurrency bugs
 
+### Test Coverage (#45)
+- Push unit test coverage to 90%+ by covering edge cases in `backtest/bias_guards.py` and `backtest/walk_forward.py`
+
 ---
 
 ## Phase 3: Ensemble Framework + Regime Detection + New Strategy Types
@@ -219,7 +222,12 @@ Evolve this educational trading algorithm project into a full recommendation eng
 - Vectorize backtest loop (#40) — replace `iterrows()` with numpy when grid search performance becomes a bottleneck
 - Add cache TTL to data providers (#41) — especially important for multi-frequency FRED data
 
-### Post-Phase 3+
+---
+
+## Post-Phase 3
+
+**Goal**: Improvements and tech debt to address after Phase 3 is complete.
+
 - Redesign dashboard UI layout (#42) — wait until Phase 3 content exists to inform the design
 
 ---
@@ -230,21 +238,36 @@ Evolve this educational trading algorithm project into a full recommendation eng
 
 ### What Was Built
 - `dashboard/app.py` — Dash app with progressive disclosure (summary → strategy drill-down)
-- `dashboard/auth.py` — Supabase Google OAuth + invitation codes
+- `dashboard/auth.py` — Supabase Google OAuth (PKCE) + invitation codes
+- `dashboard/telemetry.py` — Fire-and-forget usage logging to `usage_log` and `access_attempts` tables
+- `dashboard/reporting.py` — Shared query functions for admin reports (used by dashboard + CLI)
 - `dashboard/theme.py` — Dark color palette, custom plotly `trader_dark` template
 - `dashboard/assets/style.css` — Trader workstation CSS (JetBrains Mono, cyan/green/red accents)
 - `dashboard/analysis.py` — Orchestrates data fetch → strategies → backtests → walk-forward
+- `scripts/report.py` — CLI tool for querying usage telemetry from desktop
+- `sql/migrations/` — Versioned SQL migrations (001-004: auth, telemetry, roles, reporting functions)
 - `Procfile` + `render.yaml` — Render deployment config
+
+### Auth
+- Google sign-in always required; invitation code only for first-time registration
+- Auth handled at WSGI middleware layer (plain HTML login page, no Dash involvement)
+- User roles (admin/user) in `authorized_users` table — controls access to reports
 
 ### UX Flow
 1. Enter ticker → ANALYZE
 2. Summary: metrics tiles, candlestick, portfolio comparison, strategy cards
 3. Click strategy → detail: signals, drawdown, walk-forward
 4. Back to summary
+5. Reports (admin only): Active Users, Top Tickers, Expressed Interest, Login Frequency
+
+### Telemetry
+- Logs: `login`, `analyze`, `analyze_error` to `usage_log`
+- Tracks: `no_code`, `invalid_code`, `auth_failed` to `access_attempts` (expressed interest)
+- See `docs/TELEMETRY.md` for details
 
 ### Deployment
 - Render free tier (with UptimeRobot to avoid cold starts)
-- Supabase for auth + invitation codes
+- Supabase for auth, invitation codes, telemetry, and reporting
 - See `docs/DEPLOYMENT.md` for progressive scaling roadmap (5 stages, free → $40/month)
 
 ### Future Dashboard Additions (as phases complete)
@@ -270,6 +293,7 @@ Pre-Phase 3 (Refactors)           ← current
   |  - Dashboard decomposition (#29)
   |  - Strategy registry (#30)
   |  - Immutable optimization (#31)
+  |  - Test coverage to 90% (#45)
   |
   v
 Phase 3 (Ensemble + Regime + Value/LBO + Data Abstraction)
@@ -288,7 +312,8 @@ Phase 4 (Recommendations + Architecture)
   |  - Recommendations (#22-#25)
   |
   v
-UI Layout Redesign (#42)
+Post-Phase 3
+  |  - UI layout redesign (#42)
 ```
 
 ## Review Checkpoints
@@ -304,6 +329,10 @@ UI Layout Redesign (#42)
 - Tests use synthetic data by default (fast, deterministic)
 - Integration tests for yfinance/FRED marked with `@pytest.mark.integration`
 - Coverage reports in `output/coverage/`
+- **Project target**: 88% overall — no PR should drop below this
+- **Per-module minimum**: 60% — modules below need documented justification
+- **Per-issue coverage**: issues that add/modify code include file-level coverage targets in ACs
+- Tests must never write to production databases — mock all external service clients
 
 ## Final Directory Structure
 
@@ -347,18 +376,26 @@ algo-cus/
     recommendations.py   Recommendation visualizations (Phase 4)
     macro.py             Macro indicator charts (Phase 5)
   dashboard/
-    app.py               App init, middleware, entry point
-    charts.py            Dark-themed chart builders (compose viz + theme)
-    layouts.py           Summary view, detail view, metric tiles
-    callbacks.py         Dash callbacks
-    serialization.py     JSON round-trip for dcc.Store
-    auth.py              Supabase Google OAuth + invitation codes
+    app.py               App init, WSGI auth middleware, entry point
+    charts.py            Dark-themed chart builders (Phase: Pre-Phase 3 #29)
+    layouts.py           Summary view, detail view, metric tiles (Phase: Pre-Phase 3 #29)
+    callbacks.py         Dash callbacks (Phase: Pre-Phase 3 #29)
+    serialization.py     JSON round-trip for dcc.Store (Phase: Pre-Phase 3 #29)
+    auth.py              Supabase Google OAuth (PKCE) + invitation codes
+    telemetry.py         Fire-and-forget usage logging
+    reporting.py         Shared query functions for admin reports
     theme.py             Dark color palette, Plotly template
     analysis.py          Orchestration layer
     assets/style.css     Trader workstation CSS
+  scripts/
+    report.py            CLI reporting tool for desktop usage queries
+    keep-alive.sh        Cron script to prevent Render cold starts
+  sql/
+    migrations/          Versioned Supabase schema migrations (001-004)
+    README.md            Migration instructions
   tests/                 Mirroring each module
   examples/              run_backtest.py, run_recommendation.py
-  docs/                  PLAN.md, SESSION_SUMMARY.md, GETTING_STARTED.md, DEPLOYMENT.md
+  docs/                  PLAN.md, SESSION_SUMMARY.md, GETTING_STARTED.md, DEPLOYMENT.md, TELEMETRY.md
   output/                (gitignored: HTML charts, paper trade logs, coverage)
 ```
 
