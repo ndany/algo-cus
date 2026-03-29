@@ -511,14 +511,16 @@ class TestViewBuilders:
 
 
 class TestReportingUI:
-    def test_navbar_shows_reports_for_admin(self):
-        nav = make_navbar(show_signout=True, user_role="admin")
+    def test_navbar_has_reports_link_when_auth_enabled(self):
+        """Reports link is always in DOM when signout shown (visibility controlled by callback)."""
+        nav = make_navbar(show_signout=True)
         assert "reports-link" in str(nav)
 
-    def test_navbar_hides_reports_for_user(self):
-        nav = make_navbar(show_signout=True, user_role="user")
-        assert "reports-link" not in str(nav)
+    def test_navbar_reports_link_hidden_by_default(self):
+        """Reports link starts hidden — toggle_reports_link callback shows it for admins."""
+        nav = make_navbar(show_signout=True)
+        assert 'display": "none"' in str(nav) or "display': 'none'" in str(nav)
 
     def test_navbar_signout_uses_slate_style(self):
-        nav = make_navbar(show_signout=True, user_role="user")
+        nav = make_navbar(show_signout=True)
         assert "btn-signout" in str(nav)

@@ -259,11 +259,11 @@ def make_navbar(show_signout=False, user_role=None):
         ], style={"flex": "1"}),
     ]
     if show_signout:
-        if user_role == "admin":
-            children.append(
-                html.A("Reports", id="reports-link", className="reports-link",
-                       style={"cursor": "pointer"}),
-            )
+        # Reports link — hidden by default, shown for admins via callback
+        children.append(
+            html.A("Reports", id="reports-link", className="reports-link",
+                   style={"cursor": "pointer", "display": "none"}),
+        )
         children.append(
             dbc.Button("Sign out", href="/auth/signout", external_link=True,
                        className="btn-signout"),
@@ -653,13 +653,11 @@ def build_strategy_detail(result, strategy_index):
 def _make_app_shell():
     """The authenticated app layout.
 
-    User role is resolved at request time via the render_main callback,
-    not here — this runs at module load (no request context available).
-    Default to 'admin' when SKIP_AUTH so Reports link is visible in dev.
+    Reports link visibility is controlled at request time by the
+    toggle_reports_link callback — not here (no request context at build).
     """
-    default_role = "admin" if SKIP_AUTH else "user"
     return html.Div([
-        make_navbar(show_signout=not SKIP_AUTH, user_role=default_role),
+        make_navbar(show_signout=not SKIP_AUTH),
         make_ticker_bar(),
         dbc.Container(id="main-content", fluid=True,
                       style={"padding": "20px 24px", "maxWidth": "1400px"}),
@@ -865,6 +863,20 @@ def build_reports_view():
         html.Div("REPORTS", className="panel-header"),
         html.Div(tabs, className="panel", style={"marginTop": "8px"}),
     ])
+
+
+@callback(
+    Output("reports-link", "style"),
+    Input("url", "href"),
+)
+def toggle_reports_link(href):
+    """Show Reports link for admin users, hide for others."""
+    from flask import session
+    user = session.get("user", {})
+    role = user.get("role", "admin" if SKIP_AUTH else "user")
+    if role == "admin":
+        return {"cursor": "pointer", "display": "inline"}
+    return {"cursor": "pointer", "display": "none"}
 
 
 @callback(
