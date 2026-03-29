@@ -19,8 +19,10 @@ import pandas as pd
 import numpy as np
 
 from strategies.base import Strategy
+from strategies.registry import register
 
 
+@register
 class RSIStrategy(Strategy):
     def __init__(
         self,

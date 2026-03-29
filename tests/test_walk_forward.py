@@ -65,11 +65,43 @@ class TestWalkForwardEngine:
             assert split["train_size"] > 0
             assert split["test_size"] > 0
 
-    def test_restores_original_params(self, sample_data):
+    def test_does_not_mutate_original_strategy(self, sample_data):
+        """Walk-forward uses copies — original strategy must be untouched (#31)."""
         strategy = MovingAverageCrossover(fast_period=20, slow_period=50)
         engine = WalkForwardEngine(n_splits=2)
         param_grid = {"fast_period": [10, 30], "slow_period": [40, 60]}
         engine.run(strategy, sample_data, param_grid=param_grid)
-        # Original params should be restored
         assert strategy.fast_period == 20
         assert strategy.slow_period == 50
+
+
+class TestWalkForwardEdgeCases:
+    """Edge-case coverage for walk-forward (#45)."""
+
+    def test_aggregate_oos_metrics_empty_folds(self):
+        """aggregate_oos_metrics returns {} when there are no folds."""
+        result = WalkForwardResult(strategy_name="Empty")
+        assert result.aggregate_oos_metrics == {}
+
+    def test_degradation_ratio_with_zero_in_sample_sharpe(self, short_data):
+        """degradation_ratio returns 0.0 when in-sample Sharpe averages to 0."""
+        result = WalkForwardResult(strategy_name="ZeroSharpe")
+        assert result.degradation_ratio == 0.0
+
+    def test_anchored_skip_when_data_too_small(self):
+        """Anchored splits skip folds when gap pushes test start past data end."""
+        from data.sample_data import generate_ohlcv
+        tiny = generate_ohlcv(days=30, seed=42)
+        # Many splits + large gap on tiny data → some splits skipped
+        engine = WalkForwardEngine(n_splits=10, gap_days=15, anchored=True)
+        result = engine.run(MovingAverageCrossover(fast_period=5, slow_period=10), tiny)
+        # Should run but produce fewer folds than requested
+        assert result.n_folds < 10
+
+    def test_rolling_skip_when_gap_too_large(self):
+        """Rolling splits skip folds when gap pushes test start past window end."""
+        from data.sample_data import generate_ohlcv
+        tiny = generate_ohlcv(days=30, seed=42)
+        engine = WalkForwardEngine(n_splits=5, gap_days=20, anchored=False)
+        result = engine.run(MovingAverageCrossover(fast_period=5, slow_period=10), tiny)
+        assert result.n_folds < 5

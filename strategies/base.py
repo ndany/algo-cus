@@ -21,6 +21,16 @@ class Strategy(ABC):
     def __init__(self, name: str = "BaseStrategy"):
         self.name = name
 
+    @property
+    def data_requirement(self) -> str:
+        """What data this strategy needs. Default: OHLCV_ONLY (backward compatible)."""
+        return "OHLCV_ONLY"
+
+    @property
+    def required_columns(self) -> list[str]:
+        """Extra columns (beyond OHLCV) this strategy requires. Default: none."""
+        return []
+
     @abstractmethod
     def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
         """Analyze market data and produce trading signals.
@@ -50,6 +60,16 @@ class Strategy(ABC):
         to reflect new parameter values.
         """
         pass
+
+    def copy(self) -> "Strategy":
+        """Return an independent copy with the same parameters.
+
+        Used by walk-forward and bias guards so grid search operates
+        on throwaway copies instead of mutating the shared instance.
+        """
+        clone = self.__class__.__new__(self.__class__)
+        clone.__init__(**self.get_params())
+        return clone
 
     def confidence(self, data: pd.DataFrame, row_index: int) -> float:
         """Return signal confidence at a given row (0.0 to 1.0).

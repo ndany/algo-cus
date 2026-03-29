@@ -20,8 +20,10 @@ Like RSI, this is a mean-reversion strategy.
 import pandas as pd
 
 from strategies.base import Strategy
+from strategies.registry import register
 
 
+@register
 class BollingerBandsStrategy(Strategy):
     def __init__(self, period: int = 20, num_std: float = 2.0):
         super().__init__(name=f"Bollinger({period},{num_std})")

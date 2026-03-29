@@ -61,7 +61,8 @@ class TestParameterStability:
         assert "fast_period" in result.columns
         assert "Sharpe Ratio" in result.columns
 
-    def test_restores_original_params(self, short_data):
+    def test_does_not_mutate_original_strategy(self, short_data):
+        """Stability test uses copies — original strategy must be untouched (#31)."""
         strategy = MovingAverageCrossover(fast_period=20, slow_period=50)
         parameter_stability_test(
             strategy, short_data,
@@ -83,3 +84,33 @@ class TestLookaheadBias:
         assert "passed" in result
         assert "message" in result
         assert "inconsistencies" in result
+
+    def test_small_data_skips_too_short_truncations(self):
+        """With very short data, truncation points < 50 are skipped."""
+        from data.sample_data import generate_ohlcv
+        short = generate_ohlcv(days=60, seed=42)
+        # Many check_points on short data → some truncation points < 50
+        result = detect_lookahead_bias(MovingAverageCrossover(), short, check_points=10)
+        assert result["passed"] is True
+
+    def test_detects_mismatch_with_cheating_strategy(self, sample_data):
+        """A strategy that uses future data should produce inconsistencies."""
+        from strategies.base import Strategy
+        import pandas as pd
+
+        class CheatingStrategy(Strategy):
+            """Uses future Close prices to generate signals — lookahead bias."""
+            def generate_signals(self, data):
+                df = data.copy()
+                df["Signal"] = 0
+                # Signal is based on future price — true lookahead
+                future = df["Close"].shift(-5)
+                df.loc[future > df["Close"], "Signal"] = 1
+                df.loc[future <= df["Close"], "Signal"] = -1
+                df["Signal"] = df["Signal"].fillna(0).astype(int)
+                return df
+
+        result = detect_lookahead_bias(CheatingStrategy(name="Cheater"), sample_data)
+        assert result["passed"] is False
+        assert len(result["inconsistencies"]) > 0
+        assert "Potential lookahead bias" in result["message"]
