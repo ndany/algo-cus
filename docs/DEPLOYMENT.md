@@ -74,25 +74,12 @@ User → Render (free tier, single process)
    d. Copy the **Client ID** and **Client Secret** from the dialog that appears — paste these into Supabase
 
    > **Publishing note:** While the app is in "Testing" status, only emails you added as test users can sign in. To allow anyone with a Google account, go back to OAuth consent screen → **Publish App**. Google may show an "unverified app" warning to users — this is normal for small projects and doesn't require verification unless you exceed 100 users.
-3. Create the invitation codes table:
-   ```sql
-   CREATE TABLE invitation_codes (
-       code TEXT PRIMARY KEY,
-       used BOOLEAN DEFAULT FALSE,
-       used_by TEXT,
-       created_at TIMESTAMPTZ DEFAULT NOW()
-   );
-   ```
-4. Create the authorized users table:
-   ```sql
-   CREATE TABLE authorized_users (
-       user_id TEXT PRIMARY KEY,
-       email TEXT NOT NULL,
-       name TEXT,
-       created_at TIMESTAMPTZ DEFAULT NOW()
-   );
-   ```
-5. Insert some invitation codes:
+3. Run database migrations:
+   - Open Supabase Dashboard > SQL Editor
+   - Run each file in `sql/migrations/` in order (001, 002, 003, ...)
+   - See `sql/README.md` for details
+
+4. Insert some invitation codes:
    ```sql
    INSERT INTO invitation_codes (code) VALUES
        ('ALGO-DEMO-2026'),
