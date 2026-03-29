@@ -714,11 +714,26 @@ def on_analyze(n_clicks, ticker):
                 ],
             })
 
+        # Log usage telemetry
+        from flask import session as flask_session
+        auth_user = flask_session.get("user", {})
+        if auth_user:
+            from dashboard.telemetry import log_usage
+            log_usage(auth_user.get("email", ""), "analyze",
+                      detail=ticker, user_name=auth_user.get("name", ""))
+
         status = f"✓ {ticker} analyzed in {result['elapsed']}s — {len(result['data'])} data points"
         return store_data, html.Span(status, style={"color": COLORS["accent_green"]})
 
     except Exception as e:
         logger.exception(f"Analysis failed for {ticker}")
+        # Log analysis failure
+        from flask import session as flask_session
+        auth_user = flask_session.get("user", {})
+        if auth_user:
+            from dashboard.telemetry import log_usage
+            log_usage(auth_user.get("email", ""), "analyze_error",
+                      detail=ticker, user_name=auth_user.get("name", ""))
         return no_update, html.Span(f"Error: {e}", style={"color": COLORS["accent_red"]})
 
 
