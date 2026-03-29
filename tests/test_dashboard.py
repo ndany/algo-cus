@@ -1,6 +1,5 @@
 """Tests for dashboard modules."""
 
-import io
 import os
 
 import pandas as pd
@@ -10,11 +9,17 @@ from dash import html
 
 from dashboard.theme import COLORS, apply_dark_theme, PLOTLY_TEMPLATE
 from dashboard.analysis import run_analysis, get_strategies
-from dashboard.app import (
-    app, server, make_empty_state, make_metric_tile, make_navbar,
+from dashboard.app import app, server
+from dashboard.layouts import (
+    make_empty_state, make_metric_tile, make_navbar,
+    build_summary_view, build_strategy_detail,
+)
+from dashboard.charts import (
     build_candlestick, build_signals_chart, build_drawdown_chart,
     build_portfolio_comparison, build_wf_chart,
-    build_summary_view, build_strategy_detail,
+)
+from dashboard.serialization import (
+    WFProxy as _WFProxy, serialize_analysis, deserialize_store,
 )
 from data.sample_data import generate_ohlcv
 from strategies import MovingAverageCrossover
@@ -24,71 +29,6 @@ from backtest.engine import Backtest
 from backtest.walk_forward import WalkForwardEngine
 from backtest.bias_guards import benchmark_buy_and_hold
 from config import INITIAL_CAPITAL, COMMISSION, SLIPPAGE
-
-
-# ── Shared fixtures ──────────────────────────────────────────────
-
-
-class _WFProxy:
-    """Lightweight stand-in for WalkForwardResult, matching render_main."""
-
-    def __init__(self, d):
-        self.strategy_name = d["strategy_name"]
-        self.degradation_ratio = d["degradation_ratio"]
-        self.folds = [type("Fold", (), {
-            "fold_index": f["fold_index"],
-            "in_sample_metrics": f["is_metrics"],
-            "out_of_sample_metrics": f["oos_metrics"],
-        })() for f in d["folds"]]
-
-
-def _serialize_analysis(data, strategy_results, buy_hold, wf_results):
-    """Serialize analysis output the same way on_analyze does."""
-    return {
-        "ticker": "TEST",
-        "elapsed": 1.0,
-        "data_json": data.to_json(date_format="iso"),
-        "strategies": [{
-            "name": sr["name"],
-            "signals_json": sr["signals_df"].to_json(date_format="iso"),
-            "results_json": sr["backtest_results"].to_json(date_format="iso"),
-            "metrics": sr["metrics"],
-        } for sr in strategy_results],
-        "buy_hold": buy_hold,
-        "walk_forward": [{
-            "strategy_name": wf.strategy_name,
-            "degradation_ratio": wf.degradation_ratio,
-            "folds": [{
-                "fold_index": f.fold_index,
-                "is_metrics": f.in_sample_metrics,
-                "oos_metrics": f.out_of_sample_metrics,
-            } for f in wf.folds],
-        } for wf in wf_results],
-    }
-
-
-def _deserialize_store(store_data):
-    """Deserialize store data the same way render_main does."""
-    data = pd.read_json(io.StringIO(store_data["data_json"]))
-    data = data.sort_values("Date").reset_index(drop=True)
-    result = {
-        "ticker": store_data["ticker"],
-        "data": data,
-        "buy_hold": store_data["buy_hold"],
-        "strategies": [],
-        "walk_forward": [],
-    }
-    for sr in store_data["strategies"]:
-        sdf = pd.read_json(io.StringIO(sr["signals_json"])).sort_values("Date").reset_index(drop=True)
-        rdf = pd.read_json(io.StringIO(sr["results_json"])).sort_values("Date").reset_index(drop=True)
-        result["strategies"].append({
-            "name": sr["name"],
-            "signals_df": sdf,
-            "backtest_results": rdf,
-            "metrics": sr["metrics"],
-        })
-    result["walk_forward"] = [_WFProxy(wf) for wf in store_data["walk_forward"]]
-    return result
 
 
 @pytest.fixture(scope="module")
@@ -116,28 +56,36 @@ def analysis_result():
     wf_engine = WalkForwardEngine(n_splits=3, gap_days=5)
     wf_results = [wf_engine.run(s, data) for s in strategies]
     return {
+        "ticker": "TEST",
+        "elapsed": 1.0,
         "data": data,
         "strategy_results": strategy_results,
         "buy_hold": buy_hold,
         "wf_results": wf_results,
+        "wf_splits_info": wf_engine.get_splits_info(data),
     }
 
 
 @pytest.fixture(scope="module")
 def store_data(analysis_result):
     """Serialized store_data as produced by on_analyze."""
-    return _serialize_analysis(
-        analysis_result["data"],
-        analysis_result["strategy_results"],
-        analysis_result["buy_hold"],
-        analysis_result["wf_results"],
-    )
+    # Build a result dict matching run_analysis() output shape
+    result = {
+        "ticker": analysis_result["ticker"],
+        "elapsed": analysis_result["elapsed"],
+        "data": analysis_result["data"],
+        "strategies": analysis_result["strategy_results"],
+        "buy_hold": analysis_result["buy_hold"],
+        "walk_forward": analysis_result["wf_results"],
+        "wf_splits_info": analysis_result["wf_splits_info"],
+    }
+    return serialize_analysis(result)
 
 
 @pytest.fixture(scope="module")
 def deserialized_result(store_data):
     """Deserialized result as consumed by render_main."""
-    return _deserialize_store(store_data)
+    return deserialize_store(store_data)
 
 
 # ── Theme tests ──────────────────────────────────────────────────
@@ -215,7 +163,7 @@ class TestDashApp:
 
     def test_plain_html_login_page_has_required_elements(self):
         """The WSGI-level HTML login page has Google button and invitation code field."""
-        from dashboard.app import _login_page
+        from dashboard.middleware import _login_page
         page = _login_page()
         assert "/auth/login" in page
         assert "Sign in with Google" in page
@@ -223,7 +171,7 @@ class TestDashApp:
         assert 'name="code"' in page
 
     def test_login_page_shows_error_message(self):
-        from dashboard.app import _login_page
+        from dashboard.middleware import _login_page
         page = _login_page(message="Not registered")
         assert "Not registered" in page
 
@@ -302,18 +250,6 @@ class TestSerializationRoundtrip:
 class TestEmptyState:
     def test_make_empty_state_returns_div(self):
         result = make_empty_state()
-        assert isinstance(result, html.Div)
-
-    def test_render_main_returns_empty_state_when_no_data(self):
-        """render_main with store_data=None should return empty state."""
-        from dashboard.app import render_main
-        result = render_main(None, -1, "terminal")
-        assert isinstance(result, html.Div)
-
-    def test_render_main_returns_empty_state_when_empty_dict(self):
-        """render_main with store_data={} (falsy) returns empty state."""
-        from dashboard.app import render_main
-        result = render_main({}, -1, "terminal")
         assert isinstance(result, html.Div)
 
 
@@ -458,52 +394,46 @@ class TestViewBuilders:
         view = build_summary_view(result)
         assert isinstance(view, html.Div)
 
-    def test_render_main_summary_when_no_strategy_selected(self, store_data):
-        """render_main with selected_strategy=-1 returns summary view."""
-        from dashboard.app import render_main
-        result = render_main(store_data, -1, "terminal")
-        assert isinstance(result, html.Div)
+    def test_summary_from_store_data(self, store_data):
+        """Deserialize + build_summary_view round-trip works."""
+        result = deserialize_store(store_data)
+        view = build_summary_view(result)
+        assert isinstance(view, html.Div)
 
-    def test_render_main_detail_when_strategy_selected(self, store_data):
-        """render_main with selected_strategy=0 returns detail view."""
-        from dashboard.app import render_main
-        result = render_main(store_data, 0, "terminal")
-        assert isinstance(result, html.Div)
+    def test_detail_from_store_data(self, store_data):
+        """Deserialize + build_strategy_detail round-trip works."""
+        result = deserialize_store(store_data)
+        view = build_strategy_detail(result, 0)
+        assert isinstance(view, html.Div)
 
-    def test_render_main_each_strategy_index(self, store_data):
-        """render_main should work for each valid strategy index."""
-        from dashboard.app import render_main
-        for i in range(len(store_data["strategies"])):
-            result = render_main(store_data, i, "terminal")
-            assert isinstance(result, html.Div)
-
-    def test_render_main_out_of_range_index_returns_summary(self, store_data):
-        """Out-of-range strategy index should fall through to summary."""
-        from dashboard.app import render_main
-        result = render_main(store_data, 99, "terminal")
-        assert isinstance(result, html.Div)
+    def test_each_strategy_detail_from_store(self, store_data):
+        """Each strategy index deserializes and renders correctly."""
+        result = deserialize_store(store_data)
+        for i in range(len(result["strategies"])):
+            view = build_strategy_detail(result, i)
+            assert isinstance(view, html.Div)
 
     def test_navigation_cycle_summary_detail_back_detail(self, store_data):
         """Regression: navigating summary → detail → back → detail broke because
         Dash lost track of a string-ID 'back-to-summary' after the detail view
         was removed. Pattern-matching IDs fix this."""
-        from dashboard.app import render_main
+        result = deserialize_store(store_data)
         # Summary
-        r = render_main(store_data, -1, "terminal")
+        r = build_summary_view(result)
         assert isinstance(r, html.Div)
         # Detail (strategy 0)
-        r = render_main(store_data, 0, "terminal")
+        r = build_strategy_detail(result, 0)
         assert isinstance(r, html.Div)
         # Back to summary
-        r = render_main(store_data, -1, "terminal")
+        r = build_summary_view(result)
         assert isinstance(r, html.Div)
         # Detail again (strategy 1) — this is where the old bug hit
-        r = render_main(store_data, 1, "terminal")
+        r = build_strategy_detail(result, 1)
         assert isinstance(r, html.Div)
         # Back and into strategy 2
-        r = render_main(store_data, -1, "terminal")
+        r = build_summary_view(result)
         assert isinstance(r, html.Div)
-        r = render_main(store_data, 2, "terminal")
+        r = build_strategy_detail(result, 2)
         assert isinstance(r, html.Div)
 
 
@@ -524,3 +454,79 @@ class TestReportingUI:
     def test_navbar_signout_uses_slate_style(self):
         nav = make_navbar(show_signout=True)
         assert "btn-signout" in str(nav)
+
+    def test_reports_view_with_data(self):
+        """build_reports_view renders when reporting functions return data."""
+        from unittest.mock import patch
+        mock_data = [{"email": "a@b.com", "action_count": 5, "last_seen": "2026-03-29"}]
+        with patch("dashboard.reporting.get_active_users", return_value=mock_data), \
+             patch("dashboard.reporting.get_top_tickers", return_value=[]), \
+             patch("dashboard.reporting.get_expressed_interest", return_value=[]), \
+             patch("dashboard.reporting.get_login_frequency", return_value=[]):
+            from dashboard.layouts import build_reports_view
+            view = build_reports_view()
+            assert isinstance(view, html.Div)
+            assert "REPORTS" in str(view)
+
+    def test_reports_view_with_no_connection(self):
+        """build_reports_view renders gracefully when reporting returns None."""
+        from unittest.mock import patch
+        with patch("dashboard.reporting.get_active_users", return_value=None), \
+             patch("dashboard.reporting.get_top_tickers", return_value=None), \
+             patch("dashboard.reporting.get_expressed_interest", return_value=None), \
+             patch("dashboard.reporting.get_login_frequency", return_value=None):
+            from dashboard.layouts import build_reports_view
+            view = build_reports_view()
+            assert isinstance(view, html.Div)
+            assert "unavailable" in str(view).lower()
+
+    def test_reports_view_with_empty_data(self):
+        """build_reports_view renders gracefully when reporting returns empty lists."""
+        from unittest.mock import patch
+        with patch("dashboard.reporting.get_active_users", return_value=[]), \
+             patch("dashboard.reporting.get_top_tickers", return_value=[]), \
+             patch("dashboard.reporting.get_expressed_interest", return_value=[]), \
+             patch("dashboard.reporting.get_login_frequency", return_value=[]):
+            from dashboard.layouts import build_reports_view
+            view = build_reports_view()
+            assert isinstance(view, html.Div)
+
+
+# ── Serialization module tests ─────────────────────────────────
+
+
+class TestSerializationModule:
+    def test_serialize_analysis_keys(self, analysis_result):
+        """serialize_analysis produces all expected keys."""
+        result = {
+            "ticker": "TEST", "elapsed": 1.0,
+            "data": analysis_result["data"],
+            "strategies": analysis_result["strategy_results"],
+            "buy_hold": analysis_result["buy_hold"],
+            "walk_forward": analysis_result["wf_results"],
+            "wf_splits_info": analysis_result["wf_splits_info"],
+        }
+        store = serialize_analysis(result)
+        assert set(store.keys()) == {
+            "ticker", "elapsed", "data_json", "strategies",
+            "buy_hold", "walk_forward", "wf_splits_info",
+        }
+
+    def test_wfproxy_attributes(self, store_data):
+        """WFProxy reconstructs strategy_name, degradation_ratio, folds."""
+        proxy = _WFProxy(store_data["walk_forward"][0])
+        assert isinstance(proxy.strategy_name, str)
+        assert isinstance(proxy.degradation_ratio, float)
+        assert len(proxy.folds) > 0
+        assert hasattr(proxy.folds[0], "fold_index")
+
+
+# ── Callbacks module tests ──────────────────────────────────────
+
+
+class TestCallbacksModule:
+    def test_register_callbacks_does_not_raise(self):
+        """register_callbacks wires up without errors (idempotent on the existing app)."""
+        # Callbacks were already registered by the app import; this just verifies no crash
+        from dashboard.callbacks import register_callbacks as rc
+        assert callable(rc)

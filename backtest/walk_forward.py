@@ -201,15 +201,14 @@ class WalkForwardEngine:
 
         for combo in product(*param_values):
             params = dict(zip(param_names, combo))
-            strategy.set_params(**params)
-            metrics = self._run_single_backtest(strategy, train_data)
+            candidate = strategy.copy()
+            candidate.set_params(**params)
+            metrics = self._run_single_backtest(candidate, train_data)
             sharpe = metrics.get("Sharpe Ratio", 0)
             if sharpe > best_sharpe:
                 best_sharpe = sharpe
                 best_params = params.copy()
 
-        # Restore best params
-        strategy.set_params(**best_params)
         return best_params
 
     def run(
@@ -233,18 +232,16 @@ class WalkForwardEngine:
         splits = self._generate_splits(data)
         result = WalkForwardResult(strategy_name=strategy.name)
 
-        original_params = strategy.get_params()
-
         for i, (train, test) in enumerate(splits):
             best_params = None
+            fold_strategy = strategy.copy()
 
             if param_grid:
-                best_params = self._optimize_params(strategy, train, param_grid)
-            elif original_params:
-                strategy.set_params(**original_params)
+                best_params = self._optimize_params(fold_strategy, train, param_grid)
+                fold_strategy.set_params(**best_params)
 
-            is_metrics = self._run_single_backtest(strategy, train)
-            oos_metrics = self._run_single_backtest(strategy, test)
+            is_metrics = self._run_single_backtest(fold_strategy, train)
+            oos_metrics = self._run_single_backtest(fold_strategy, test)
 
             fold = FoldResult(
                 fold_index=i,
@@ -257,10 +254,6 @@ class WalkForwardEngine:
                 best_params=best_params,
             )
             result.folds.append(fold)
-
-        # Restore original params
-        if original_params:
-            strategy.set_params(**original_params)
 
         return result
 

@@ -9,7 +9,13 @@ addopts = "--cov=. --cov-report=term-missing --cov-report=html:output/coverage -
 omit = [
     "tests/*",
     "examples/*",
-    "dashboard/*",
+    "dashboard/app.py",
+    "dashboard/auth.py",
+    "dashboard/middleware.py",
+    "dashboard/telemetry.py",
+    "dashboard/reporting.py",
+    "dashboard/analysis.py",
+    "dashboard/callbacks.py",
     "output/*",
     ".venv/*",
 ]

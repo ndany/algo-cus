@@ -69,7 +69,7 @@ User → Render (free tier, single process)
       - Application type: **Web application**
       - Name: `AlgoStation Web` (internal label, anything works)
       - Authorized JavaScript origins: add `https://your-app.onrender.com` (and `http://localhost:8050` for local dev)
-      - Authorized redirect URIs: copy the exact callback URL from the Supabase Google provider form — it looks like `https://<your-supabase-ref>.supabase.co/auth/v1/callback`
+      - Authorized redirect URIs: `https://<your-supabase-ref>.supabase.co/auth/v1/callback` (Supabase handles the Google callback, then redirects to your app)
       - Click **Create**
    d. Copy the **Client ID** and **Client Secret** from the dialog that appears — paste these into Supabase
 
@@ -99,6 +99,31 @@ User → Render (free tier, single process)
 ### Eliminating Cold Starts (Free)
 
 Sign up at https://uptimerobot.com (free tier: 50 monitors) and add an HTTP monitor pointing to your Render URL. Set the check interval to 14 minutes. This keeps the process alive permanently.
+
+### Staging Environment
+
+A staging service lets you test code changes on Render before deploying to production.
+
+**Render setup:**
+1. Create a second **Web Service** in Render (requires credit card on file — no charges on free tier)
+2. Connect the same GitHub repository
+3. Set **Branch** to your feature branch (e.g., `feature/usage-telemetry`)
+4. Same build command, start command, and environment variables as production
+5. Staging URL will be `https://algo-cus-staging.onrender.com` (or whatever name you choose)
+
+**Google OAuth — add staging redirect URI:**
+- Google Cloud Console → APIs & Services → Credentials → your OAuth client
+- Under **Authorized redirect URIs**, add: `https://algo-cus-staging.onrender.com/auth/callback`
+- Note: Google's `redirect_uri` goes to Supabase (`<ref>.supabase.co/auth/v1/callback`), not your app directly. The Supabase callback URL should already be listed from initial setup.
+
+**Supabase — add staging redirect URL:**
+- Supabase Dashboard → Authentication → URL Configuration → Redirect URLs
+- Add: `https://algo-cus-staging.onrender.com/auth/callback`
+
+**What's shared between production and staging:**
+- Same Supabase project (auth, telemetry, invitation codes)
+- Same Google OAuth client (multiple redirect URIs supported)
+- Telemetry data mixes between environments — filter by Render logs if needed
 
 ---
 

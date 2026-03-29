@@ -131,14 +131,13 @@ def parameter_stability_test(
     param_values = list(param_ranges.values())
     rows = []
 
-    original_params = strategy.get_params()
-
     for combo in product(*param_values):
         params = dict(zip(param_names, combo))
-        strategy.set_params(**params)
+        candidate = strategy.copy()
+        candidate.set_params(**params)
 
         bt = Backtest(
-            strategy=strategy,
+            strategy=candidate,
             initial_capital=initial_capital,
             commission=commission,
             slippage=slippage,
@@ -148,10 +147,6 @@ def parameter_stability_test(
 
         row = {**params, **metrics}
         rows.append(row)
-
-    # Restore original params
-    if original_params:
-        strategy.set_params(**original_params)
 
     return pd.DataFrame(rows)
 

@@ -19,8 +19,10 @@ Common parameter choices:
 import pandas as pd
 
 from strategies.base import Strategy
+from strategies.registry import register
 
 
+@register
 class MovingAverageCrossover(Strategy):
     def __init__(self, fast_period: int = 20, slow_period: int = 50):
         super().__init__(name=f"MA_Crossover({fast_period},{slow_period})")

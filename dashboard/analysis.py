@@ -11,9 +11,7 @@ import time
 import pandas as pd
 
 from data.market_data import MarketDataProvider
-from strategies.moving_average_crossover import MovingAverageCrossover
-from strategies.rsi_strategy import RSIStrategy
-from strategies.bollinger_bands import BollingerBandsStrategy
+from strategies import registry
 from backtest.engine import Backtest
 from backtest.walk_forward import WalkForwardEngine
 from backtest.bias_guards import benchmark_buy_and_hold
@@ -23,12 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 def get_strategies():
-    """Return the standard set of strategies."""
-    return [
-        MovingAverageCrossover(fast_period=20, slow_period=50),
-        RSIStrategy(period=14, oversold=30, overbought=70),
-        BollingerBandsStrategy(period=20, num_std=2.0),
-    ]
+    """Return instances of all registered strategies compatible with OHLCV data."""
+    return registry.create_all()
 
 
 def run_analysis(ticker: str) -> dict:
