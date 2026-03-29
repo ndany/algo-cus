@@ -43,6 +43,7 @@ if not SKIP_AUTH:
         get_google_authorize_url, exchange_code_for_session,
         validate_invitation_code, consume_invitation_code,
         register_authorized_user, is_user_authorized,
+        get_user_with_role,
     )
     from dashboard.telemetry import log_usage, log_access_attempt
     # Flask session secret — must be stable across gunicorn workers.
@@ -196,6 +197,9 @@ class _AuthAndProxyMiddleware:
 
                 if is_user_authorized(user["id"]):
                     # Returning user — go straight in
+                    db_user = get_user_with_role(user["id"])
+                    if db_user:
+                        user["role"] = db_user.get("role", "user")
                     session["authenticated"] = True
                     session["user"] = user
                     log_usage(user["email"], "login", user_name=user.get("name", ""))
@@ -215,6 +219,7 @@ class _AuthAndProxyMiddleware:
                 consume_invitation_code(invite_code, user["email"])
                 register_authorized_user(user["id"], user["email"],
                                          user.get("name", user["email"]))
+                user["role"] = "user"  # new users default to user role
                 log_usage(user["email"], "login", detail="first_login",
                           user_name=user.get("name", ""))
                 session["authenticated"] = True
@@ -240,7 +245,7 @@ server.wsgi_app = _AuthAndProxyMiddleware(server.wsgi_app, server)
 # LAYOUT COMPONENTS
 # ============================================================
 
-def make_navbar(show_signout=False):
+def make_navbar(show_signout=False, user_role=None):
     children = [
         dbc.NavbarBrand(
             [html.Span("ALGO", style={"color": COLORS["accent_cyan"]}),
@@ -254,10 +259,14 @@ def make_navbar(show_signout=False):
         ], style={"flex": "1"}),
     ]
     if show_signout:
+        if user_role == "admin":
+            children.append(
+                html.A("Reports", id="reports-link", className="reports-link",
+                       style={"cursor": "pointer"}),
+            )
         children.append(
             dbc.Button("Sign out", href="/auth/signout", external_link=True,
-                       outline=True, color="secondary", size="sm",
-                       style={"fontSize": "12px", "padding": "4px 12px"}),
+                       className="btn-signout"),
         )
     return dbc.Navbar(
         dbc.Container(children, fluid=True,
@@ -643,8 +652,11 @@ def build_strategy_detail(result, strategy_index):
 
 def _make_app_shell():
     """The authenticated app layout."""
+    from flask import session
+    user = session.get("user", {}) if not SKIP_AUTH else {}
+    user_role = user.get("role", "admin" if SKIP_AUTH else "user")
     return html.Div([
-        make_navbar(show_signout=not SKIP_AUTH),
+        make_navbar(show_signout=not SKIP_AUTH, user_role=user_role),
         make_ticker_bar(),
         dbc.Container(id="main-content", fluid=True,
                       style={"padding": "20px 24px", "maxWidth": "1400px"}),
@@ -657,6 +669,7 @@ def _make_app_shell():
 app.layout = html.Div([
     dcc.Store(id="analysis-store"),
     dcc.Store(id="selected-strategy", data=-1),
+    dcc.Store(id="view-mode", data="terminal"),
     dcc.Location(id="url", refresh=False),
     _make_app_shell(),
 ])
@@ -741,8 +754,12 @@ def on_analyze(n_clicks, ticker):
     Output("main-content", "children"),
     Input("analysis-store", "data"),
     Input("selected-strategy", "data"),
+    Input("view-mode", "data"),
 )
-def render_main(store_data, selected_strategy):
+def render_main(store_data, selected_strategy, view_mode):
+    if view_mode == "reports":
+        return build_reports_view()
+
     if not store_data:
         return make_empty_state()
 
@@ -788,6 +805,81 @@ def render_main(store_data, selected_strategy):
         return build_strategy_detail(result, selected_strategy)
 
     return build_summary_view(result)
+
+
+def build_reports_view():
+    """Admin reports page with tabbed views."""
+    import dash_bootstrap_components as dbc
+    from dashboard.reporting import (
+        get_active_users, get_top_tickers,
+        get_expressed_interest, get_login_frequency,
+    )
+
+    def make_report_table(data, columns=None):
+        if not data:
+            return html.Div("No data available",
+                           style={"color": COLORS["text_muted"], "padding": "20px"})
+        if columns is None:
+            columns = list(data[0].keys())
+        header = html.Tr([html.Th(c.replace("_", " ").title(),
+                    style={"color": COLORS["text_secondary"], "padding": "8px 12px",
+                           "borderBottom": f"1px solid {COLORS['border']}",
+                           "fontSize": "12px", "fontWeight": "600"})
+                    for c in columns])
+        rows = []
+        for row in data:
+            rows.append(html.Tr([
+                html.Td(str(row.get(c, "")),
+                    style={"color": COLORS["text_primary"], "padding": "8px 12px",
+                           "borderBottom": f"1px solid {COLORS['border']}",
+                           "fontSize": "13px"})
+                for c in columns
+            ]))
+        return html.Table([html.Thead(header), html.Tbody(rows)],
+                         style={"width": "100%", "borderCollapse": "collapse"})
+
+    tabs = dbc.Tabs([
+        dbc.Tab(html.Div(make_report_table(get_active_users()),
+                style={"padding": "16px"}),
+                label="Active Users", tab_id="active-users"),
+        dbc.Tab(html.Div(make_report_table(get_top_tickers()),
+                style={"padding": "16px"}),
+                label="Top Tickers", tab_id="top-tickers"),
+        dbc.Tab(html.Div(make_report_table(get_expressed_interest()),
+                style={"padding": "16px"}),
+                label="Expressed Interest", tab_id="interest"),
+        dbc.Tab(html.Div(make_report_table(get_login_frequency()),
+                style={"padding": "16px"}),
+                label="Login Frequency", tab_id="logins"),
+    ], active_tab="active-users")
+
+    return html.Div([
+        html.Div([
+            html.A("← Back to Terminal", id="back-to-terminal",
+                   style={"color": COLORS["accent_cyan"], "cursor": "pointer",
+                          "fontSize": "13px", "textDecoration": "none"}),
+        ], style={"marginBottom": "16px"}),
+        html.Div("REPORTS", className="panel-header"),
+        html.Div(tabs, className="panel", style={"marginTop": "8px"}),
+    ])
+
+
+@callback(
+    Output("view-mode", "data"),
+    Input("reports-link", "n_clicks"),
+    prevent_initial_call=True,
+)
+def show_reports(n_clicks):
+    return "reports"
+
+
+@callback(
+    Output("view-mode", "data", allow_duplicate=True),
+    Input("back-to-terminal", "n_clicks"),
+    prevent_initial_call=True,
+)
+def back_to_terminal(n_clicks):
+    return "terminal"
 
 
 @callback(

@@ -11,7 +11,7 @@ from dash import html
 from dashboard.theme import COLORS, apply_dark_theme, PLOTLY_TEMPLATE
 from dashboard.analysis import run_analysis, get_strategies
 from dashboard.app import (
-    app, server, make_empty_state, make_metric_tile,
+    app, server, make_empty_state, make_metric_tile, make_navbar,
     build_candlestick, build_signals_chart, build_drawdown_chart,
     build_portfolio_comparison, build_wf_chart,
     build_summary_view, build_strategy_detail,
@@ -307,13 +307,13 @@ class TestEmptyState:
     def test_render_main_returns_empty_state_when_no_data(self):
         """render_main with store_data=None should return empty state."""
         from dashboard.app import render_main
-        result = render_main(None, -1)
+        result = render_main(None, -1, "terminal")
         assert isinstance(result, html.Div)
 
     def test_render_main_returns_empty_state_when_empty_dict(self):
         """render_main with store_data={} (falsy) returns empty state."""
         from dashboard.app import render_main
-        result = render_main({}, -1)
+        result = render_main({}, -1, "terminal")
         assert isinstance(result, html.Div)
 
 
@@ -461,26 +461,26 @@ class TestViewBuilders:
     def test_render_main_summary_when_no_strategy_selected(self, store_data):
         """render_main with selected_strategy=-1 returns summary view."""
         from dashboard.app import render_main
-        result = render_main(store_data, -1)
+        result = render_main(store_data, -1, "terminal")
         assert isinstance(result, html.Div)
 
     def test_render_main_detail_when_strategy_selected(self, store_data):
         """render_main with selected_strategy=0 returns detail view."""
         from dashboard.app import render_main
-        result = render_main(store_data, 0)
+        result = render_main(store_data, 0, "terminal")
         assert isinstance(result, html.Div)
 
     def test_render_main_each_strategy_index(self, store_data):
         """render_main should work for each valid strategy index."""
         from dashboard.app import render_main
         for i in range(len(store_data["strategies"])):
-            result = render_main(store_data, i)
+            result = render_main(store_data, i, "terminal")
             assert isinstance(result, html.Div)
 
     def test_render_main_out_of_range_index_returns_summary(self, store_data):
         """Out-of-range strategy index should fall through to summary."""
         from dashboard.app import render_main
-        result = render_main(store_data, 99)
+        result = render_main(store_data, 99, "terminal")
         assert isinstance(result, html.Div)
 
     def test_navigation_cycle_summary_detail_back_detail(self, store_data):
@@ -489,19 +489,36 @@ class TestViewBuilders:
         was removed. Pattern-matching IDs fix this."""
         from dashboard.app import render_main
         # Summary
-        r = render_main(store_data, -1)
+        r = render_main(store_data, -1, "terminal")
         assert isinstance(r, html.Div)
         # Detail (strategy 0)
-        r = render_main(store_data, 0)
+        r = render_main(store_data, 0, "terminal")
         assert isinstance(r, html.Div)
         # Back to summary
-        r = render_main(store_data, -1)
+        r = render_main(store_data, -1, "terminal")
         assert isinstance(r, html.Div)
         # Detail again (strategy 1) — this is where the old bug hit
-        r = render_main(store_data, 1)
+        r = render_main(store_data, 1, "terminal")
         assert isinstance(r, html.Div)
         # Back and into strategy 2
-        r = render_main(store_data, -1)
+        r = render_main(store_data, -1, "terminal")
         assert isinstance(r, html.Div)
-        r = render_main(store_data, 2)
+        r = render_main(store_data, 2, "terminal")
         assert isinstance(r, html.Div)
+
+
+# ── Reporting UI tests ─────────────────────────────────────────
+
+
+class TestReportingUI:
+    def test_navbar_shows_reports_for_admin(self):
+        nav = make_navbar(show_signout=True, user_role="admin")
+        assert "reports-link" in str(nav)
+
+    def test_navbar_hides_reports_for_user(self):
+        nav = make_navbar(show_signout=True, user_role="user")
+        assert "reports-link" not in str(nav)
+
+    def test_navbar_signout_uses_slate_style(self):
+        nav = make_navbar(show_signout=True, user_role="user")
+        assert "btn-signout" in str(nav)
