@@ -19,7 +19,20 @@ source .venv/bin/activate  # macOS/Linux
 pip install -r requirements.txt
 ```
 
-## 2. Run Tests (Verify Everything Works)
+## 2. Run SQL Migrations (New Environment Setup)
+
+If setting up a new Supabase environment, run the SQL migrations in order via the Supabase SQL Editor or CLI:
+
+```
+sql/migrations/001_auth_tables.sql        # invitation_codes + authorized_users tables
+sql/migrations/002_telemetry.sql          # usage_log + access_attempts tables
+sql/migrations/003_user_roles.sql         # Add role column to authorized_users
+sql/migrations/004_reporting_functions.sql # Server-side reporting RPC functions
+```
+
+These are idempotent (`CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`) and safe to re-run.
+
+## 3. Run Tests (Verify Everything Works)
 
 ```bash
 # Run all unit tests with coverage
@@ -31,7 +44,7 @@ python -m pytest tests/ -m "not integration" -q
 
 Open `output/coverage/index.html` in your browser to explore the coverage report.
 
-## 3. Launch the Dashboard (Quickest Way to See Everything)
+## 4. Launch the Dashboard (Quickest Way to See Everything)
 
 ```bash
 SKIP_AUTH=1 python -m dashboard.app
@@ -59,6 +72,12 @@ Now type `AMZN` in the ticker input and click **ANALYZE** (or press Enter).
 - [ ] All charts have the dark plotly theme (dark background, light gridlines)
 - [ ] Charts are interactive: hover for values, zoom with drag, reset with double-click
 
+**Admin Reports page** (visible when `SKIP_AUTH=1` or logged in as admin):
+- [ ] Click "Reports" link in the navbar
+- [ ] Tabbed interface: Active Users, Top Tickers, Expressed Interest, Login Frequency
+- [ ] Each tab shows a data table (empty with no telemetry data yet, which is expected)
+- [ ] Click a strategy card or "Back" to return to analysis view
+
 **Click any strategy card** (e.g., "MA_Crossover(20,50)"):
 
 **Strategy detail validations:**
@@ -72,7 +91,7 @@ Now type `AMZN` in the ticker input and click **ANALYZE** (or press Enter).
 
 **Try other tickers:** `GOOG`, `JPM`, `MSFT`
 
-## 4. Backtest via CLI (Alternative to Dashboard)
+## 5. Backtest via CLI (Alternative to Dashboard)
 
 ```bash
 python examples/run_backtest.py
@@ -105,7 +124,7 @@ python examples/run_backtest.py --ticker AMZN GOOG JPM MSFT
 - [ ] Charts are interactive (zoom, pan, hover shows values)
 - [ ] Real price data looks correct (compare a chart to Yahoo Finance for sanity)
 
-## 5. Walk-Forward Analysis
+## 6. Walk-Forward Analysis
 
 Open a Python session to run walk-forward validation interactively:
 
@@ -160,7 +179,7 @@ save_figure(fig, "wf_degradation")
 - [ ] `output/wf_degradation.html` — Bar chart comparing strategy robustness
 - [ ] Degradation ratios printed in terminal (closer to 1.0 = more robust, < 0.3 = likely overfit)
 
-## 6. Bias Guards
+## 7. Bias Guards
 
 ```python
 from backtest.bias_guards import (
@@ -203,7 +222,7 @@ save_figure(fig, "param_sensitivity_ma")
 - [ ] `output/param_sensitivity_ma.html` — Heatmap with Sharpe ratios. Gradual color transitions = robust; patchy/random colors = fragile
 - [ ] Compare strategy returns vs buy-and-hold and random baselines in terminal output
 
-## 7. Walk-Forward with Parameter Optimization
+## 8. Walk-Forward with Parameter Optimization
 
 ```python
 from backtest.walk_forward import WalkForwardEngine
@@ -254,17 +273,17 @@ After running everything above, your `output/` directory should contain:
 ```
 output/
   coverage/index.html              # Coverage report
-  Synthetic_candlestick.html       # From step 4
+  Synthetic_candlestick.html       # From step 5
   Synthetic_*_signals.html         # Signal charts (3 files)
   Synthetic_portfolio_comparison.html
   Synthetic_metrics.html
-  AMZN_candlestick.html            # From step 4
+  AMZN_candlestick.html            # From step 5
   AMZN_*_signals.html
   AMZN_portfolio_comparison.html
   AMZN_metrics.html
-  wf_splits.html                   # From step 5
+  wf_splits.html                   # From step 6
   wf_*.html                        # Walk-forward charts
   wf_degradation.html
-  param_sensitivity_ma.html        # From step 6
-  wf_optimized_ma.html             # From step 7
+  param_sensitivity_ma.html        # From step 7
+  wf_optimized_ma.html             # From step 8
 ```
