@@ -26,6 +26,9 @@ from dashboard.reporting import (
 
 def print_table(title, data, columns=None):
     """Print a list of dicts as a formatted table."""
+    if data is None:
+        print(f"\n{title}: No database connection\n")
+        return
     if not data:
         print(f"\n{title}: No data\n")
         return

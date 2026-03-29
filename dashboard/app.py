@@ -817,6 +817,9 @@ def build_reports_view():
     )
 
     def make_report_table(data, columns=None):
+        if data is None:
+            return html.Div("Reports unavailable — no database connection",
+                           style={"color": COLORS["accent_orange"], "padding": "20px"})
         if not data:
             return html.Div("No data available",
                            style={"color": COLORS["text_muted"], "padding": "20px"})
