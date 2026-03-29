@@ -93,31 +93,32 @@ Evolve this educational trading algorithm project into a full recommendation eng
 
 ---
 
-## Pre-Phase 3: Architecture Refactors
+## Pre-Phase 3: Architecture Refactors — DONE
 
 **Goal**: Address architectural debt identified in the architecture review before adding complexity. These are prerequisites for Phases 3-5.
 
 ### Dashboard Decomposition (#29)
-- Split `dashboard/app.py` (807 lines) into focused modules:
+- Split `dashboard/app.py` (946 lines) into focused modules:
   - `dashboard/charts.py` — dark-themed chart builders (compose `visualization/*.py` + `apply_dark_theme()`)
-  - `dashboard/layouts.py` — summary view, detail view, empty state, metric tiles
+  - `dashboard/layouts.py` — summary view, detail view, empty state, metric tiles, reports view
   - `dashboard/callbacks.py` — analyze, render, navigation callbacks
-  - `dashboard/serialization.py` — JSON round-trip logic
-  - `dashboard/app.py` — app init, middleware wiring, entry point only (~100 lines)
+  - `dashboard/serialization.py` — JSON round-trip logic (WFProxy, serialize/deserialize)
+  - `dashboard/middleware.py` — WSGI auth middleware (AuthAndProxyMiddleware, login page)
+  - `dashboard/app.py` — app init, layout shell, entry point only (85 lines)
 
 ### Strategy Registry (#30)
-- Replace hardcoded `get_strategies()` with a registry pattern in `strategies/__init__.py`
-- Add `data_requirement` and `required_columns` properties to `Strategy` base class
-- Strategies declare what data they need; the system filters to compatible strategies
-- Default: `OHLCV_ONLY` — existing strategies work unchanged
+- Replaced hardcoded `get_strategies()` with `@register` decorator pattern in `strategies/registry.py`
+- Added `data_requirement` and `required_columns` properties to `Strategy` base class
+- Strategies declare what data they need; the system filters to compatible strategies via `registry.get_compatible()`
+- Default: `OHLCV_ONLY` — existing strategies work unchanged, auto-registered
 
 ### Immutable Optimization (#31)
-- Add `copy()` or `with_params()` to `Strategy` base class
+- Added `copy()` to `Strategy` base class returning independent instances
 - Walk-forward and bias guards use copies during grid search instead of mutating shared state
-- Eliminates 3 save/restore boilerplate blocks and prevents concurrency bugs
+- Eliminated 3 save/restore boilerplate blocks — safe for concurrent dashboard requests
 
 ### Test Coverage (#45)
-- Push unit test coverage to 90%+ by covering edge cases in `backtest/bias_guards.py` and `backtest/walk_forward.py`
+- Pushed unit test coverage to 92% (156 tests) by covering edge cases in `backtest/bias_guards.py` (100%) and `backtest/walk_forward.py` (100%)
 
 ---
 
@@ -289,11 +290,11 @@ Phase 2 (Walk-Forward)             ✅ DONE
 Web Dashboard                      ✅ DONE (built early)
   |
   v
-Pre-Phase 3 (Refactors)           ← current
+Pre-Phase 3 (Refactors)           ✅ DONE
   |  - Dashboard decomposition (#29)
   |  - Strategy registry (#30)
   |  - Immutable optimization (#31)
-  |  - Test coverage to 90% (#45)
+  |  - Test coverage to 92% (#45)
   |
   v
 Phase 3 (Ensemble + Regime + Value/LBO + Data Abstraction)
@@ -319,8 +320,8 @@ Post-Phase 3
 ## Review Checkpoints
 
 1. After Phases 1-2 + Web Dashboard (foundation) — **done**
-2. After Pre-Phase 3 refactors (architecture readiness) ← **current**
-3. After Phase 3 (core innovation + new strategy types)
+2. After Pre-Phase 3 refactors (architecture readiness) — **done**
+3. After Phase 3 (core innovation + new strategy types) ← **current**
 4. After Phases 4-5 (recommendations + macro)
 
 ## Testing Strategy
@@ -356,7 +357,8 @@ algo-cus/
     fred_data.py         FRED macro data (Phase 5)
     cache/               Parquet cache (gitignored)
   strategies/
-    base.py              Strategy ABC (with registry, data_requirement, copy())
+    base.py              Strategy ABC (data_requirement, required_columns, copy())
+    registry.py          @register decorator, StrategyRegistry, DataRequirement enum
     moving_average_crossover.py
     rsi_strategy.py
     bollinger_bands.py
@@ -376,11 +378,12 @@ algo-cus/
     recommendations.py   Recommendation visualizations (Phase 4)
     macro.py             Macro indicator charts (Phase 5)
   dashboard/
-    app.py               App init, WSGI auth middleware, entry point
-    charts.py            Dark-themed chart builders (Phase: Pre-Phase 3 #29)
-    layouts.py           Summary view, detail view, metric tiles (Phase: Pre-Phase 3 #29)
-    callbacks.py         Dash callbacks (Phase: Pre-Phase 3 #29)
-    serialization.py     JSON round-trip for dcc.Store (Phase: Pre-Phase 3 #29)
+    app.py               App init, layout shell, entry point (85 lines)
+    middleware.py        WSGI auth middleware (AuthAndProxyMiddleware, login page)
+    charts.py            Dark-themed chart builders (compose visualization/*.py)
+    layouts.py           Summary view, detail view, metric tiles, reports view
+    callbacks.py         Dash callbacks (analyze, render, navigation)
+    serialization.py     JSON round-trip for dcc.Store (WFProxy)
     auth.py              Supabase Google OAuth (PKCE) + invitation codes
     telemetry.py         Fire-and-forget usage logging
     reporting.py         Shared query functions for admin reports

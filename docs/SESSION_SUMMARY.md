@@ -2,12 +2,13 @@
 
 ## Next Steps
 
-Start with Pre-Phase 3 refactors:
-1. #29: Split `dashboard/app.py` into charts, layouts, callbacks, serialization
-2. #30: Strategy registry + `data_requirement`/`required_columns` on base class
-3. #31: `copy()`/`with_params()` for immutable optimization
+Start Phase 3: Ensemble Framework + Regime Detection + New Strategy Types:
+1. #32: Data provider abstraction + enrichment layer
+2. #33: Value strategy, #34: LBO screening strategy
+3. #18: Regime detection, #19: Ensemble framework
+4. #35: Visualization overlays, #36: Signal validation
 
-Then proceed to Phase 3 (see `docs/PLAN.md` for full sequence and dependency graph).
+See `docs/PLAN.md` for full sequence and dependency graph.
 
 ---
 
@@ -304,3 +305,63 @@ Moved all auth handling to a WSGI middleware (`_AuthAndProxyMiddleware` in `dash
 19. **Auth at WSGI layer, not Dash callbacks**: Dash wraps `server.wsgi_app` with its own middleware that intercepts all requests. Flask `before_request` hooks never fire. Auth must operate at the WSGI layer to intercept requests before Dash sees them.
 20. **Invitation code only for first-time users**: Returning users in `authorized_users` skip the code check. This prevents the friction of needing a code on every login while still gating new registrations.
 21. **Roles are manual-only**: Admin role must be set via SQL (`UPDATE authorized_users SET role = 'admin' WHERE email = '...'`). No self-service role escalation.
+
+---
+
+### Session 4 — Pre-Phase 3 Refactors (2026-03-29)
+
+**Branch**: `feature/pre-phase-3`
+
+#### What Was Done
+
+Executed all 4 Pre-Phase 3 issues (#29, #30, #31, #45) as a single PR to `main`. These are architectural prerequisites for Phase 3.
+
+#### Dashboard Decomposition (#29)
+
+Split `dashboard/app.py` (946 lines) into 6 focused modules:
+
+| New Module | Responsibility | Coverage |
+|------------|---------------|----------|
+| `dashboard/charts.py` | Dark-themed chart builders (compose `visualization/*.py` + `apply_dark_theme()`) | 100% |
+| `dashboard/layouts.py` | Summary view, detail view, empty state, metric tiles, reports view | 100% |
+| `dashboard/callbacks.py` | Analyze, render, navigation callbacks (thin wrappers) | Omitted — framework glue |
+| `dashboard/serialization.py` | JSON round-trip for `dcc.Store` (WFProxy, serialize/deserialize) | 100% |
+| `dashboard/middleware.py` | WSGI auth middleware (AuthAndProxyMiddleware, login page HTML) | Omitted — requires Supabase |
+| `dashboard/app.py` | App init, layout shell, entry point | 85 lines |
+
+#### Strategy Registry (#30)
+
+| File | What It Does |
+|------|-------------|
+| `strategies/registry.py` | `StrategyRegistry` class, `@register` decorator, `DataRequirement` enum |
+| `strategies/base.py` | Added `data_requirement` property (default `OHLCV_ONLY`), `required_columns` property (default `[]`) |
+| `strategies/__init__.py` | Exports `registry`, `register`, `DataRequirement` |
+| `dashboard/analysis.py` | `get_strategies()` now calls `registry.create_all()` instead of hardcoded list |
+
+All 3 existing strategies decorated with `@register` — no other changes needed.
+
+#### Immutable Optimization (#31)
+
+Added `Strategy.copy()` returning an independent instance via `cls.__new__(cls).__init__(**self.get_params())`. Replaced save/restore mutation pattern in:
+- `WalkForwardEngine._optimize_params()` — grid search on `strategy.copy()`
+- `WalkForwardEngine.run()` — each fold gets `strategy.copy()`
+- `bias_guards.parameter_stability_test()` — each param combo on `strategy.copy()`
+
+Eliminated 3 save/restore boilerplate blocks. Original strategy is never mutated.
+
+#### Test Coverage (#45)
+
+Pushed coverage from 88% to 92% (156 tests). Key edge cases covered:
+- `bias_guards.py`: small data truncation skip, cheating strategy lookahead detection
+- `walk_forward.py`: empty folds aggregate, anchored/rolling skip on tiny data
+- `strategies/base.py`: default `get_params()`, `set_params()`, `confidence()`, `__repr__()`
+
+#### Coverage Config Change
+
+Updated `pyproject.toml` coverage omits: replaced blanket `dashboard/*` with specific omits for auth-dependent and framework-glue modules (`app.py`, `auth.py`, `middleware.py`, `telemetry.py`, `reporting.py`, `analysis.py`, `callbacks.py`). New extracted modules (`charts.py`, `layouts.py`, `serialization.py`) are now tracked.
+
+#### Key Design Decisions (22-24)
+
+22. **Dashboard middleware extracted to its own module**: `dashboard/middleware.py` contains the full WSGI auth middleware class and login page HTML. Keeps `app.py` as pure init (~85 lines). The middleware accepts auth functions as a dict to avoid module-level coupling to Supabase imports.
+23. **Strategy registry is decorator-based**: `@register` on the class definition auto-registers. `registry.get_compatible(available_columns)` filters by `required_columns` for Phase 3 when fundamentals-requiring strategies are added.
+24. **`copy()` over `with_params()`**: Chose `copy()` (no-arg, returns clone with identical params) over `with_params(**kwargs)` (returns clone with modified params). Simpler API — callers do `s.copy()` then `s.set_params()` if needed. The two-step pattern is explicit about what changes.

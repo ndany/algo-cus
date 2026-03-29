@@ -34,7 +34,7 @@ Charts are saved as interactive HTML files in `output/`.
 ## Architecture
 
 - **DataFrame contract**: All data flows as DataFrames with columns `Date, Open, High, Low, Close, Volume`. Strategies add a `Signal` column (1=buy, -1=sell, 0=hold). Do not break this contract.
-- **Strategy pattern**: All strategies extend `strategies/base.py:Strategy` and implement `generate_signals()`. They must also implement `get_params()`/`set_params()` for walk-forward optimization.
+- **Strategy pattern**: All strategies extend `strategies/base.py:Strategy` and implement `generate_signals()`. They must also implement `get_params()`/`set_params()` for walk-forward optimization. Strategies use `@register` from `strategies/registry.py` for auto-discovery, declare `data_requirement`/`required_columns` for filtering, and `copy()` for immutable optimization.
 - **Backtest engine**: `backtest/engine.py` — the `calculate_metrics()` standalone function is reused by walk-forward; don't fold it back into the class.
 - **Visualization**: All chart functions in `visualization/` return `plotly.graph_objects.Figure` objects. They're composable — usable in Jupyter, saved as HTML, or embedded in the Dash dashboard.
 - **Telemetry**: `dashboard/telemetry.py` provides fire-and-forget logging to `usage_log` (login, analyze, analyze_error) and `access_attempts` (no_code, invalid_code, auth_failed) tables. All calls swallow errors — telemetry never blocks users.
@@ -47,8 +47,14 @@ SKIP_AUTH=1 python -m dashboard.app        # Local dev (no auth)
 gunicorn dashboard.app:server              # Production
 ```
 
-The dashboard is a Dash app at `dashboard/app.py`. It uses:
-- Supabase for auth (Google OAuth + invitation codes) via WSGI middleware (`_AuthAndProxyMiddleware`)
+The dashboard is a Dash app with modular architecture:
+- `dashboard/app.py` — app init, layout shell, entry point (85 lines)
+- `dashboard/middleware.py` — WSGI auth middleware (`AuthAndProxyMiddleware`)
+- `dashboard/charts.py` — dark-themed chart builders (compose `visualization/*.py` + `apply_dark_theme()`)
+- `dashboard/layouts.py` — summary view, detail view, empty state, metric tiles, reports view
+- `dashboard/callbacks.py` — analyze, render, navigation callbacks
+- `dashboard/serialization.py` — JSON round-trip for `dcc.Store` (WFProxy, serialize/deserialize)
+- Supabase for auth (Google OAuth + invitation codes)
 - On-demand yfinance data fetching
 - Dark trader workstation theme (`dashboard/theme.py` + `dashboard/assets/style.css`)
 - Progressive disclosure UX: summary → strategy detail drill-down
@@ -81,12 +87,12 @@ Environment variables for production:
 config.py           Central configuration (tickers, slippage, commission, paths)
 backtest/           Engine, walk-forward, bias guards
 data/               Sample data generator, yfinance provider, FRED stub
-strategies/         Base class + MA crossover, RSI, Bollinger Bands
+strategies/         Base class + registry + MA crossover, RSI, Bollinger Bands
 visualization/      Plotly chart modules (standalone, composable)
 dashboard/          Dash web app (dark theme, auth, telemetry, reporting, deployment)
 scripts/            CLI tools (report.py for usage telemetry queries)
 sql/migrations/     Supabase SQL migrations (001-004: auth tables, telemetry, roles, reporting functions)
-tests/              pytest suite (88% coverage target)
+tests/              pytest suite (88% coverage target; currently 92%, 156 tests)
 docs/               Plan, deployment guide, getting started, telemetry, session notes
 output/             Gitignored — HTML charts, coverage reports, paper trade logs
 ```
@@ -104,5 +110,6 @@ output/             Gitignored — HTML charts, coverage reports, paper trade lo
 - Slippage defaults to 0.3% (manual execution estimate), configurable in `config.py`
 - Cache files go in `data/cache/` (gitignored, parquet format)
 - Supabase for auth, invitation codes, usage telemetry, and reporting; no other database
-- Dashboard chart builders live in `dashboard/app.py` and use `dashboard/theme.py` for dark styling
+- Dashboard chart builders live in `dashboard/charts.py` and use `dashboard/theme.py` for dark styling
 - All `visualization/*.py` charts remain standalone (return `go.Figure`) — the dashboard composes them
+- New strategies register via `@register` decorator and appear in the dashboard automatically
