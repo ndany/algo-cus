@@ -218,6 +218,14 @@ Updated `docs/PLAN.md`:
 - Added known risks for fundamental data availability and LBO model sensitivity
 - Updated final directory structure with all new files
 
+#### Key Design Decisions (11-15)
+
+11. **DataProvider ABC**: All data sources (OHLCV, fundamentals, FRED) will share a common interface with `fetch()` and `data_contract()`. `DataEnricher` merges multi-frequency data via forward-fill.
+12. **Strategy declares its data needs**: `data_requirement` and `required_columns` properties on the base class. OHLCV-only is the default (backward compatible). The system filters strategies by available data.
+13. **LBO as screening heuristic first**: Start simple (entry multiple → debt capacity → implied IRR → signal). Design for subclassing into a full model later. Don't build the full model until the data infrastructure and simpler value strategies are proven.
+14. **Pre-Phase 3 refactors are prerequisites**: Dashboard split, strategy registry, and immutable optimization must happen before Phase 3 adds complexity. They're small refactors with high leverage.
+15. **UI layout redesign deferred to post-Phase 3**: The current progressive disclosure works for 3 strategies. Wait until regime, ensemble, value, and LBO content exists before redesigning.
+
 ---
 
 ### Session 3 — Telemetry, Reporting, Roles, and Auth Flow Redesign (2026-03-28)
@@ -296,13 +304,3 @@ Moved all auth handling to a WSGI middleware (`_AuthAndProxyMiddleware` in `dash
 19. **Auth at WSGI layer, not Dash callbacks**: Dash wraps `server.wsgi_app` with its own middleware that intercepts all requests. Flask `before_request` hooks never fire. Auth must operate at the WSGI layer to intercept requests before Dash sees them.
 20. **Invitation code only for first-time users**: Returning users in `authorized_users` skip the code check. This prevents the friction of needing a code on every login while still gating new registrations.
 21. **Roles are manual-only**: Admin role must be set via SQL (`UPDATE authorized_users SET role = 'admin' WHERE email = '...'`). No self-service role escalation.
-
----
-
-#### Key Design Decisions (11-15)
-
-11. **DataProvider ABC**: All data sources (OHLCV, fundamentals, FRED) will share a common interface with `fetch()` and `data_contract()`. `DataEnricher` merges multi-frequency data via forward-fill.
-12. **Strategy declares its data needs**: `data_requirement` and `required_columns` properties on the base class. OHLCV-only is the default (backward compatible). The system filters strategies by available data.
-13. **LBO as screening heuristic first**: Start simple (entry multiple → debt capacity → implied IRR → signal). Design for subclassing into a full model later. Don't build the full model until the data infrastructure and simpler value strategies are proven.
-14. **Pre-Phase 3 refactors are prerequisites**: Dashboard split, strategy registry, and immutable optimization must happen before Phase 3 adds complexity. They're small refactors with high leverage.
-15. **UI layout redesign deferred to post-Phase 3**: The current progressive disclosure works for 3 strategies. Wait until regime, ensemble, value, and LBO content exists before redesigning.
