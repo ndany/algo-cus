@@ -159,10 +159,126 @@ Was incorrectly set to `claude/trading-algorithm-basics-wtmEM`. User changed it 
 
 ## Next Steps
 
-When resuming, start Phase 3 (Ensemble Framework + Regime Detection):
-1. `strategies/regime_detector.py` — ADX, volatility ratio, Hurst exponent
-2. `strategies/ensemble.py` — Weighted vote based on regime affinity
-3. `visualization/regime.py` — Regime-colored price chart, attribution, correlation
-4. Add regime/ensemble views to the dashboard
-5. Tests for all new modules
-6. Commit, push, review checkpoint
+When resuming, start with Pre-Phase 3 refactors (#29-#31), then Phase 3.
+See updated `docs/PLAN.md` for full sequence and dependency graph.
+
+---
+
+# Session 2 — Architecture Review, Retrospective Issues, and LBO Modeling
+
+**Date**: 2026-03-29
+**Branch**: `claude/retrospective-issues-AmFsi`
+**Model**: Claude Opus 4.6 (1M context)
+
+---
+
+## What We Did
+
+### 1. Retrospective Issue Backlog
+
+Created 26 GitHub issues (#3-#28) to capture all planned and completed work as a formal backlog. Each issue has testable acceptance criteria (checkboxes). Issues are grouped by phase using GitHub labels:
+- **Phase 1: Real Market Data** — #3-#7 (all closed, AC verified)
+- **Phase 2: Walk-Forward + Bias Guards** — #8-#11 (all closed, AC verified)
+- **Web Dashboard** — #12-#17 (all closed, AC verified)
+- **Phase 3: Ensemble + Regime** — #18-#21 (open, backlog)
+- **Phase 4: Recommendations + Paper Trading** — #22-#25 (open, backlog)
+- **Phase 5: FRED Macro Data** — #26-#28 (open, backlog)
+
+Closed issues had all acceptance criteria verified against the codebase before closing. Checkbox status updated to checked on all closed issues.
+
+Note: GitHub milestones could not be created via available MCP tools — labels used as grouping mechanism instead.
+
+### 2. Architecture Review
+
+Conducted a thorough review of the codebase design. Key findings:
+
+**Strengths:**
+- Clean DataFrame contract (`Date, Open, High, Low, Close, Volume` + `Signal`) — the backbone of composability
+- Strategy pattern is minimal and well-executed (ABC, `get_params()`/`set_params()`)
+- Standalone `calculate_metrics()` extraction was the right call
+- Composable `go.Figure` visualization factories
+- Lookahead bias detection via truncation comparison
+- Auth at WSGI layer, not Dash callbacks
+
+**Weaknesses identified:**
+1. `dashboard/app.py` is an 807-line monolith (layout + charts + callbacks + auth + serialization)
+2. Strategy mutation during optimization (`set_params()` on shared instance, save/restore pattern x3)
+3. `analysis.py` hardcodes strategy list — no registry or discovery
+4. Row-by-row `iterrows()` backtest loop (slow for grid search)
+5. Fragile win rate calculation (paired-index assumption)
+6. No position/portfolio abstraction (all-in or all-out only)
+7. Brittle JSON serialization with inline `WFProxy` hack in dashboard
+8. Config as module-level constants (not injectable for testing)
+9. No signal validation (strategies could return invalid values)
+10. No cache TTL (stale data served silently)
+
+### 3. LBO Modeling Decision
+
+A trading expert recommended including LBO (Leveraged Buyout) modeling. Key decisions:
+
+- **Scope**: Start with a screening heuristic (implied equity IRR as buy signal), designed so a future subclass can extend to a full LBO model (multi-tranche debt, cash flow projections, sensitivity tables)
+- **Data**: Requires financial statement data (EBITDA, debt, capex, enterprise value) — fundamentally different from OHLCV
+- **Data source**: Free APIs first (yfinance fundamentals, SEC EDGAR); interface supports swapping to paid providers later
+- **Architecture impact**: Drives the need for `DataProvider` ABC, `DataEnricher` (multi-frequency merge), and `required_columns` on strategy base class
+
+### 4. Architectural Refactor Issues
+
+Created 14 additional issues (#29-#42) capturing all architectural recommendations, prioritized by phase:
+
+**Pre-Phase 3 Refactors** (blockers):
+- #29: Split dashboard monolith into focused modules
+- #30: Strategy registry with auto-discovery + `data_requirement` metadata
+- #31: Immutable strategy optimization (copy-on-optimize)
+
+**Phase 3 Additions:**
+- #32: Data provider abstraction + enrichment layer
+- #33: Value strategy category
+- #34: LBO screening strategy (extensible to full model)
+- #35: Visualization overlays (MA curves, return comparison)
+- #36: Signal validation
+
+**Phase 4:**
+- #37: Domain model for analysis results (dataclasses replacing flat dicts)
+- #38: Position and portfolio abstraction
+- #39: Fix win rate calculation with trade-ID matching
+
+**Phase 5 / As-Needed:**
+- #40: Vectorize backtest loop
+- #41: Cache TTL for data providers
+- #42: Redesign dashboard UI layout
+
+### 5. Plan Updates
+
+Updated `docs/PLAN.md`:
+- Added "Pre-Phase 3: Architecture Refactors" section
+- Expanded Phase 3 to include data abstraction, value strategies, LBO screening
+- Expanded Phase 4 to include domain model, position management, win rate fix
+- Updated dependency graph with new phase
+- Updated constraints (free APIs to start, paid later)
+- Added known risks for fundamental data availability and LBO model sensitivity
+- Updated final directory structure with all new files
+
+---
+
+## Key Design Decisions (This Session)
+
+11. **DataProvider ABC**: All data sources (OHLCV, fundamentals, FRED) will share a common interface with `fetch()` and `data_contract()`. `DataEnricher` merges multi-frequency data via forward-fill.
+
+12. **Strategy declares its data needs**: `data_requirement` and `required_columns` properties on the base class. OHLCV-only is the default (backward compatible). The system filters strategies by available data.
+
+13. **LBO as screening heuristic first**: Start simple (entry multiple → debt capacity → implied IRR → signal). Design for subclassing into a full model later. Don't build the full model until the data infrastructure and simpler value strategies are proven.
+
+14. **Pre-Phase 3 refactors are prerequisites**: Dashboard split, strategy registry, and immutable optimization must happen before Phase 3 adds complexity. They're small refactors with high leverage.
+
+15. **UI layout redesign deferred to post-Phase 3**: The current progressive disclosure works for 3 strategies. Wait until regime, ensemble, value, and LBO content exists before redesigning.
+
+---
+
+## Next Steps
+
+Start with Pre-Phase 3 refactors:
+1. #29: Split `dashboard/app.py` into charts, layouts, callbacks, serialization
+2. #30: Strategy registry + `data_requirement`/`required_columns` on base class
+3. #31: `copy()`/`with_params()` for immutable optimization
+
+Then proceed to Phase 3 (see updated `docs/PLAN.md` for full sequence).
