@@ -258,12 +258,12 @@ def make_navbar(show_signout=False, user_role=None):
                               "letterSpacing": "2px", "fontWeight": "600"}),
         ], style={"flex": "1"}),
     ]
+    # Reports link — hidden by default, shown for admins via callback
+    children.append(
+        html.A("Reports", id="reports-link", className="reports-link",
+               style={"cursor": "pointer", "display": "none"}),
+    )
     if show_signout:
-        # Reports link — hidden by default, shown for admins via callback
-        children.append(
-            html.A("Reports", id="reports-link", className="reports-link",
-                   style={"cursor": "pointer", "display": "none"}),
-        )
         children.append(
             dbc.Button("Sign out", href="/auth/signout", external_link=True,
                        className="btn-signout"),
