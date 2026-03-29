@@ -65,12 +65,12 @@ Requires `SUPABASE_URL` and `SUPABASE_KEY` env vars (or a `.env` file). See [`do
 config.py              Tickers, slippage (0.3%), commission (0.1%), paths
 backtest/              Engine, walk-forward validation, bias guards
 data/                  yfinance provider with caching, synthetic generator
-strategies/            MA Crossover, RSI, Bollinger Bands (extensible base class)
+strategies/            MA Crossover, RSI, Bollinger Bands (registry-based, extensible)
 visualization/         Standalone plotly chart modules
-dashboard/             Dash web app (dark theme, Supabase auth, admin reports)
+dashboard/             Modular Dash web app (dark theme, Supabase auth, admin reports)
 scripts/               CLI tools (report.py for usage telemetry)
 sql/                   Supabase SQL migrations (auth tables, telemetry, roles, reporting functions)
-tests/                 121 tests, 88% coverage
+tests/                 156 tests, 92% coverage
 docs/                  Plan, deployment guide, getting started, session notes
 ```
 
