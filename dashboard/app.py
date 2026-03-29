@@ -651,12 +651,15 @@ def build_strategy_detail(result, strategy_index):
 
 
 def _make_app_shell():
-    """The authenticated app layout."""
-    from flask import session
-    user = session.get("user", {}) if not SKIP_AUTH else {}
-    user_role = user.get("role", "admin" if SKIP_AUTH else "user")
+    """The authenticated app layout.
+
+    User role is resolved at request time via the render_main callback,
+    not here — this runs at module load (no request context available).
+    Default to 'admin' when SKIP_AUTH so Reports link is visible in dev.
+    """
+    default_role = "admin" if SKIP_AUTH else "user"
     return html.Div([
-        make_navbar(show_signout=not SKIP_AUTH, user_role=user_role),
+        make_navbar(show_signout=not SKIP_AUTH, user_role=default_role),
         make_ticker_bar(),
         dbc.Container(id="main-content", fluid=True,
                       style={"padding": "20px 24px", "maxWidth": "1400px"}),
