@@ -214,12 +214,18 @@ class TestDashApp:
         assert "main-content" in layout_str
 
     def test_plain_html_login_page_has_required_elements(self):
-        """The WSGI-level HTML login page has Google link and invitation form."""
-        from dashboard.app import _LOGIN_HTML
-        assert "/auth/login" in _LOGIN_HTML
-        assert "/auth/code" in _LOGIN_HTML
-        assert "Sign in with Google" in _LOGIN_HTML
-        assert "invitation code" in _LOGIN_HTML.lower()
+        """The WSGI-level HTML login page has Google button and invitation code field."""
+        from dashboard.app import _login_page
+        page = _login_page()
+        assert "/auth/login" in page
+        assert "Sign in with Google" in page
+        assert "invitation code" in page.lower()
+        assert 'name="code"' in page
+
+    def test_login_page_shows_error_message(self):
+        from dashboard.app import _login_page
+        page = _login_page(message="Not registered")
+        assert "Not registered" in page
 
 
 class TestAuthModule:
