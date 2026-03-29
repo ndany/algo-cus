@@ -44,6 +44,7 @@ if not SKIP_AUTH:
         validate_invitation_code, consume_invitation_code,
         register_authorized_user, is_user_authorized,
     )
+    from dashboard.telemetry import log_usage, log_access_attempt
     # Flask session secret — must be stable across gunicorn workers.
     server.secret_key = os.environ.get(
         "FLASK_SECRET_KEY", os.environ.get("SUPABASE_KEY", "change-me")
@@ -187,6 +188,7 @@ class _AuthAndProxyMiddleware:
                 user = exchange_code_for_session(auth_code, code_verifier)
                 if not user:
                     logger.warning("OAuth code exchange failed")
+                    log_access_attempt("", "auth_failed", name="unknown")
                     return self._serve_html(start_response,
                         _login_page("Sign-in failed. Please try again."))
 
@@ -196,11 +198,15 @@ class _AuthAndProxyMiddleware:
                     # Returning user — go straight in
                     session["authenticated"] = True
                     session["user"] = user
+                    log_usage(user["email"], "login", user_name=user.get("name", ""))
                     resp = flask_redirect("/")
                     return self._save_session_and_respond(environ, start_response, resp)
 
                 # New user — need a valid invitation code
                 if not invite_code or not validate_invitation_code(invite_code, user_identity=user["email"]):
+                    log_access_attempt(
+                        user["email"], "invalid_code" if invite_code else "no_code",
+                        name=user.get("name", ""), code_provided=invite_code)
                     return self._serve_html(start_response,
                         _login_page("You're not yet registered. "
                                     "Please enter a valid invitation code to get started."))
@@ -209,6 +215,8 @@ class _AuthAndProxyMiddleware:
                 consume_invitation_code(invite_code, user["email"])
                 register_authorized_user(user["id"], user["email"],
                                          user.get("name", user["email"]))
+                log_usage(user["email"], "login", detail="first_login",
+                          user_name=user.get("name", ""))
                 session["authenticated"] = True
                 session["user"] = user
                 resp = flask_redirect("/")
