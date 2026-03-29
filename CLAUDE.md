@@ -84,17 +84,45 @@ Environment variables for production:
 ## Key Directories
 
 ```
-config.py           Central configuration (tickers, slippage, commission, paths)
-backtest/           Engine, walk-forward, bias guards
-data/               Sample data generator, yfinance provider, FRED stub
-strategies/         Base class + registry + MA crossover, RSI, Bollinger Bands
-visualization/      Plotly chart modules (standalone, composable)
-dashboard/          Dash web app (dark theme, auth, telemetry, reporting, deployment)
-scripts/            CLI tools (report.py for usage telemetry queries)
-sql/migrations/     Supabase SQL migrations (001-004: auth tables, telemetry, roles, reporting functions)
-tests/              pytest suite (88% coverage target; currently 92%, 156 tests)
-docs/               Plan, deployment guide, getting started, telemetry, session notes
-output/             Gitignored — HTML charts, coverage reports, paper trade logs
+algo-cus/
+├── config.py                  Central configuration (tickers, slippage, commission, paths)
+├── backtest/
+│   ├── engine.py              Backtest class + standalone calculate_metrics()
+│   ├── walk_forward.py        WalkForwardEngine (rolling/anchored, grid search)
+│   └── bias_guards.py         Lookahead detection, parameter stability, benchmarks
+├── data/
+│   ├── sample_data.py         Synthetic data generator (deterministic, seed=42)
+│   ├── market_data.py         MarketDataProvider (yfinance + parquet caching)
+│   ├── fred_data.py           FRED macro data stub (Phase 5)
+│   └── cache/                 Parquet cache (gitignored)
+├── strategies/
+│   ├── base.py                Strategy ABC (data_requirement, required_columns, copy())
+│   ├── registry.py            @register decorator, filtering by data needs
+│   ├── moving_average_crossover.py
+│   ├── rsi_strategy.py
+│   └── bollinger_bands.py
+├── visualization/
+│   ├── charts.py              Candlestick, signals, portfolio comparison, drawdown
+│   └── walk_forward.py        Walk-forward split timeline, in-vs-out-sample, sensitivity
+├── dashboard/
+│   ├── app.py                 App init, layout shell, entry point (85 lines)
+│   ├── middleware.py          WSGI auth middleware + login page
+│   ├── charts.py              Dark-themed chart builders
+│   ├── layouts.py             Views, metric tiles, reports
+│   ├── callbacks.py           Analyze, render, navigation
+│   ├── serialization.py       JSON round-trip for dcc.Store
+│   ├── analysis.py            Data fetch → strategies → backtest orchestration
+│   ├── auth.py                Supabase Google OAuth (PKCE) + invitation codes
+│   ├── telemetry.py           Fire-and-forget usage logging
+│   ├── reporting.py           Shared query functions for admin reports
+│   ├── theme.py               Dark color palette, Plotly template
+│   └── assets/style.css       Trader workstation CSS
+├── scripts/
+│   └── report.py              CLI reporting tool for usage telemetry
+├── sql/migrations/            Supabase SQL migrations (001-004)
+├── tests/                     pytest suite (88% coverage target; currently 92%, 156 tests)
+├── docs/                      Plan, deployment guide, getting started, telemetry, session notes
+└── output/                    Gitignored — HTML charts, coverage reports, paper trade logs
 ```
 
 ## Test Coverage
