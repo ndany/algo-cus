@@ -62,16 +62,30 @@ Requires `SUPABASE_URL` and `SUPABASE_KEY` env vars (or a `.env` file). See [`do
 ## Project Structure
 
 ```
-config.py              Tickers, slippage (0.3%), commission (0.1%), paths
-backtest/              Engine, walk-forward validation, bias guards
-data/                  yfinance provider with caching, synthetic generator
-strategies/            MA Crossover, RSI, Bollinger Bands (registry-based, extensible)
-visualization/         Standalone plotly chart modules
-dashboard/             Modular Dash web app (dark theme, Supabase auth, admin reports)
-scripts/               CLI tools (report.py for usage telemetry)
-sql/                   Supabase SQL migrations (auth tables, telemetry, roles, reporting functions)
-tests/                 156 tests, 92% coverage
-docs/                  Plan, deployment guide, getting started, session notes
+algo-cus/
+├── config.py                  Tickers, slippage (0.3%), commission (0.1%), paths
+├── backtest/                  Engine, walk-forward validation, bias guards
+├── data/                      yfinance provider with caching, synthetic generator
+├── strategies/                Registry-based, extensible strategy framework
+│   ├── base.py                Strategy ABC (data_requirement, copy())
+│   ├── registry.py            @register decorator, filtering by data needs
+│   ├── moving_average_crossover.py
+│   ├── rsi_strategy.py
+│   └── bollinger_bands.py
+├── visualization/             Standalone Plotly chart modules
+├── dashboard/                 Modular Dash web app (dark theme, Supabase auth, admin reports)
+│   ├── app.py                 App init, layout shell, entry point (85 lines)
+│   ├── middleware.py          WSGI auth middleware + login page
+│   ├── charts.py              Dark-themed chart builders
+│   ├── layouts.py             Views, metric tiles, reports
+│   ├── callbacks.py           Analyze, render, navigation
+│   ├── serialization.py       JSON round-trip for dcc.Store
+│   ├── analysis.py            Data fetch → strategies → backtest orchestration
+│   └── theme.py               Dark color palette, Plotly template
+├── scripts/                   CLI tools (report.py for usage telemetry)
+├── sql/                       Supabase SQL migrations (auth, telemetry, roles, reporting)
+├── tests/                     156 tests, 92% coverage
+└── docs/                      Plan, deployment guide, getting started, session notes
 ```
 
 ## Testing
