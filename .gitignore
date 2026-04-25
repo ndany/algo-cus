@@ -30,3 +30,7 @@ htmlcov/
 # IDE
 .vscode/
 .idea/
+
+# Graphify knowledge graph (regenerable; per-developer)
+graphify-out/
+.graphifyignore
