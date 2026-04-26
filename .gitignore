@@ -1,3 +1,4 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -31,6 +32,10 @@ htmlcov/
 .vscode/
 .idea/
 
+# Claude Code local state — share settings.json (team config), keep everything else local
+.claude/*
+!.claude/settings.json
+
 # Graphify knowledge graph (regenerable; per-developer)
 graphify-out/
-.graphifyignore
+graphify-out-*/

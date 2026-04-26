@@ -1,0 +1,23 @@
+# Test files — test relationships aren't the domain model
+tests/
+
+# Deployment config — no code relationships
+render.yaml
+
+# Dependency manifests — no graph signal
+requirements.txt
+pyproject.toml
+
+# Generated output
+graphify-out/
+output/
+data/cache/
+htmlcov/
+.coverage
+
+# Images (no graph signal for a code project)
+*.png
+
+# IDE
+.vscode/
+.idea/
