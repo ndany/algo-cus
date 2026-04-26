@@ -10,6 +10,7 @@ pyproject.toml
 
 # Generated output
 graphify-out/
+graphify-out-*/
 output/
 data/cache/
 htmlcov/
